@@ -25,7 +25,7 @@ A lot of new bash code is being written despite it being an aged language with m
 Very incomplete
 
 * Parsing: There is a working parser. But it's quite fragile and intolerant of whitespace. This will be relaxed.
-* Command line arguments. At the moment the interpreter runs a hard coded script and does not pass command line arguments to it.
+* Command line arguments. Scripts cannot yet take command line arguments.
 * Types. C-strings and ints kind of work. The type system will be completely overhauled but the result will still likely be fairly basic.
 * AST. Decent progress. A few things left to model.
 * C-imports. Very experimental. Might be extended or removed.

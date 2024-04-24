@@ -324,7 +324,6 @@ pub fn parse_statement(remaining: &mut&str) -> anyhow::Result<KlisterStatement> 
     static IMPORT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^import ").unwrap());
     static WHILE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^while[ (]").unwrap());
     static IF_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^if[ (]").unwrap());
-    static SHELL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^`").unwrap());
     if IMPORT_RE.is_match(remaining) {
         return parse_import(remaining);
     } else if WHILE_RE.is_match(remaining) {
@@ -352,45 +351,8 @@ pub fn just_parse_statements(s: &str) -> anyhow::Result<Vec<KlisterStatement>> {
     if remaining.is_empty() {return result} else {return Err(anyhow!("Trailing garbage {}", remaining))}
 }
 
-pub fn parse_ast() -> anyhow::Result<KlisterStatement> {
-    let statements = just_parse_statements(r#"
-    import libc.so.6 int puts(cbc)
-    import libc.so.6 int putchar(int)
-    import libc.so.6 int getchar()
-    import libc.so.6 int atoi(cbc)
-    import libc.so.6 int write(int, cbb, int)
-    import libc.so.6 int fsync(int)
-    import libc.so.6 int strlen(cbb)
-    
-    puts("Hello boizzz")
-    putchar(97)
-    puts("Bye")
-    atoi("1337")
-    
-    asdf="yess"
-    ?(`false`)
-    puts(asdf)
-    putchar(asdf[1])
-    puts("")
-    asdf=atoi("10")
-
-    b=`echo -en    hello world\\n\\0 | tr a-z A-Z|tail -c 7` 
-    c=strlen(b)
-    write(2,b,c)
-    fsync(2)
-
-    while(0<asdf){
-        puts("Looping")
-        asdf=asdf-1 
-    }
-    if(asdf<-2){
-        puts("less")
-    }else{
-        puts("more")
-    }
-    asdf=atoi("10")
-    asdf=asdf*3-2+2/2+atoi("11")
-    "#)?;
+pub fn parse_ast(s: &str) -> anyhow::Result<KlisterStatement> {
+    let statements = just_parse_statements(s)?;
 
     return Ok(KlisterStatement::Block(statements));
 }

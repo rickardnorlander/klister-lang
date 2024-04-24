@@ -2,11 +2,10 @@
 #[derive(Clone)]
 #[derive(Debug)]
 pub struct KlisterRTE {
-    s: String
+    pub s: String
 }
 
 impl KlisterRTE {
-
     pub fn new() -> KlisterRTE {
         KlisterRTE{s: "".to_string()}
     }

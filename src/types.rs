@@ -1,11 +1,12 @@
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 #![allow(private_interfaces)]
-#![allow(non_snake_case)]
 
-use libffi::middle::Type;
 use std::ffi::c_int;
 use std::mem;
+
+use libffi::middle::Type;
+
 #[derive(Debug)]
 enum OwnershipTag {
     Borrowed, OwnedMalloced, Owned
@@ -31,7 +32,7 @@ impl TypeTag {
         }
     }
 
-    pub fn getFFIType(&self) -> Type {
+    pub fn get_ffi_type(&self) -> Type {
         match self {
             TypeTag::klister_int => Type::c_int(),
             TypeTag::klister_cstr(OwnershipTag::Borrowed, Mutability::Const) => Type::pointer(),

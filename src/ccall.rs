@@ -1,19 +1,18 @@
-#![allow(unused_imports)]
 #![allow(dead_code)]
 
-use libffi::middle::Type;
-use std::mem;
-use std::ffi::c_int;
-type LmidT = c_long;
-
-use std::ffi::c_char;
-//use std::ffi::CStr;
-use std::ffi::CString;
-use std::ffi::c_long;
-use std::ffi::c_void;
-use libffi::middle::Cif;
 use std::collections::HashMap;
+use std::ffi::c_void;
+use std::ffi::c_char;
+use std::ffi::c_int;
+use std::ffi::c_long;
+use std::ffi::CString;
+
+use libffi::middle::Cif;
+
 use crate::types::TypeTag;
+
+
+type LmidT = c_long;
 
 pub const LM_ID_NEWLM:i64 = -1;
 
@@ -21,9 +20,6 @@ const RTLD_NOW:i32 = 0x00002;
 const RTLD_GLOBAL:i32 = 0x00100;
 const RTLD_NODELETE:i32 = 0x01000;
 const RTLD_DI_LMID:c_int = 1;
-
-use crate::ast::KlisterValue;
-
 
 extern "C" {
     fn dlmopen(mid: LmidT, filename: *const c_char, flags: c_int) -> *mut c_void;
@@ -91,8 +87,8 @@ impl Libraries {
         let library = self.load_lib(&libname);
         let c_fnname = CString::new(fname).unwrap();
         let function = unsafe {dlsym(library, c_fnname.as_c_str().as_ptr())};
-        let retinfo = TypeTag::from_string(rettypename).getFFIType();
-        let cif = Cif::new(argnames.iter().map(|x| TypeTag::from_string(x).getFFIType()), retinfo);
+        let retinfo = TypeTag::from_string(rettypename).get_ffi_type();
+        let cif = Cif::new(argnames.iter().map(|x| TypeTag::from_string(x).get_ffi_type()), retinfo);
 
         let argcopy: Vec<TypeTag> = argnames.iter().map(|x| TypeTag::from_string(x)).collect();
 

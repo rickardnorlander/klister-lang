@@ -1,6 +1,8 @@
+#![allow(dead_code)]
+
 use std::ffi::c_int;
 
-use crate::KlisterRTE;
+use crate::except::KlisterRTE;
 
 #[derive(Debug)]
 #[derive(Clone)]
