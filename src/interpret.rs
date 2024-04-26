@@ -17,6 +17,7 @@ pub struct Context {
 
 fn handle_import(context: &mut Context, libname: &str, fname: &str, rettypename: &str, argnames: &Vec<String>) -> Result<(), KlisterRTE> {
     context.libs.load_fn(libname, fname, rettypename, &argnames.iter().map(String::as_str).collect::<Vec<_>>());
+    context.variables.insert(fname.to_string(), KlisterValue::CFunction(fname.to_string()));
     Ok(())
 }
 
@@ -104,10 +105,17 @@ fn handle_shell_pipeline(sp: &ShellPipelineS) -> ShellResE {
 fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> Result<KlisterValue, KlisterRTE> {
     match expression {
         KlisterExpression::Call(fn_expr, arguments) => {
-            let KlisterExpression::Variable(ref fn_name) = **fn_expr else {
-                todo!("Functions cannot be computer for now {:?}", fn_expr);
-            };
-            handle_ffi_call(context, fn_name, arguments)
+            let v = handle_expression(context, fn_expr)?;
+            if let KlisterValue::CFunction(fn_name) = v {
+                handle_ffi_call(context, &fn_name, arguments)
+            } else if let KlisterValue::FakeFunction(inner) = v {
+                if arguments.len() != 0 {
+                    return Err(KlisterRTE::from_str("Wrong number of arguments"));
+                }
+                return Ok(*inner);
+            } else {
+                return Err(KlisterRTE::from_str("Object is not callable"));
+            }
         }
         KlisterExpression::Index(arr, index) => {
             let lv = unpack_cs(handle_expression(context, arr)?)?;
@@ -125,6 +133,26 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
                     match subscript.as_str() {
                         "is_ok" => {
                             return Ok(KlisterValue::Bool(matches!(r, KlisterResult::ResOk(_))))
+                        }
+                        "ok_variant" => {
+                            let KlisterResult::ResOk(ok) = r else {
+                                return Err(KlisterRTE::from_str("Accessed inactive variant"));
+                            };
+                            return Ok(*ok);
+                        }
+                        "err_variant" => {
+                            let KlisterResult::ResErr(err) = r else {
+                                return Err(KlisterRTE::from_str("Accessed inactive variant"));
+                            };
+                            return Ok(KlisterValue::Exception(err));
+                        }
+                        _ => todo!()
+                    }
+                }
+                KlisterValue::BInt(b) => {
+                    match subscript.as_str() {
+                        "to_string" => {
+                            return Ok(KlisterValue::FakeFunction(Box::new(KlisterValue::CS(b.to_string()))));
                         }
                         _ => todo!()
                     }

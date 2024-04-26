@@ -5,17 +5,23 @@ import libc.so.6 int atoi(cbc)
 import libc.so.6 int write(int, cbb, int)
 import libc.so.6 int fsync(int)
 
+myputs = puts
 # Comment a
-puts("Bye")  # Comment
+myputs("Bye")  # Comment
 
-is_false_ok = 0 < 1
-while(is_false_ok){
+if(?(`false`).is_ok){
     puts("Never")
-    is_false_ok = ?(`false`).is_ok
 }
 asdf="yess"
 putchar(asdf[1])
 puts(asdf)
+
+might_fail = ?(`echo We good`)
+if (might_fail.is_ok) {
+    was_fine = might_fail.ok_variant
+    write(1, was_fine, was_fine.len)
+}
+
 
 b=`echo hello world | tr a-z A-Z|tail -c 6` 
 write(2,b,b.len)
@@ -31,7 +37,6 @@ if(asdf<-2){
 }else{
     puts("more")
 }
-asdf=atoi("10")
-asdf=asdf*3-2+2/2+atoi("11")
-putchar(asdf)
-putchar(10)
+
+puts((2+3*4).to_string())
+puts(((2+3)*4).to_string())

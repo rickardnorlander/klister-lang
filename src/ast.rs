@@ -18,10 +18,14 @@ pub enum KlisterValue {
     BInt(BigInt),
     Bool(bool),
     Bytes(Vec<u8>),
-    Exception,
+    Exception(Box<KlisterRTE>),
     Res(KlisterResult),
     ShellRes(ShellResE),
     Nothing,
+    CFunction(String),
+    // Just a wrapper around a value for now
+    // todo: Do things properly but lots of work possibly.
+    FakeFunction(Box<KlisterValue>),
 }
 
 #[derive(Clone)]

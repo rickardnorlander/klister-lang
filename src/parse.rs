@@ -69,6 +69,15 @@ fn parse_precedence_6(s: &mut& str) -> anyhow::Result<KlisterExpression> {
         return parse_catch_expr(s);
     }
 
+    static PAREN: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\(").unwrap());
+    if PAREN.is_match(s) {
+        consume("(", s)?;
+        let ret = parse_precedence_1(s);
+        skip_space(s);
+        consume(")", s)?;
+        return ret;
+    }
+
     if let Ok(id) = parse_id(s) {
         return Ok(KlisterExpression::Variable(id));
     }
@@ -138,6 +147,8 @@ fn parse_precedence_5(s: &mut&str) -> anyhow::Result<KlisterExpression> {
 
 fn parse_precedence_4point5(s: &mut&str) -> anyhow::Result<KlisterExpression> {
     let parse_next = parse_precedence_5;
+
+    skip_space(s);
     if consume("!", s).is_ok() {
         return Ok(KlisterExpression::Not(Box::new(parse_precedence_4point5(s)?)));
     } else {
