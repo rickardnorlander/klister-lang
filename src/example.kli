@@ -6,13 +6,13 @@ import libc.so.6 int write(int, cbb, int)
 import libc.so.6 int fsync(int)
 import libc.so.6 int strlen(cbb)
 
-puts("Hello boizzz")
+puts ( "Hello boizzz" ) 
 putchar(97)
 puts("Bye")
 atoi("1337")
 
 asdf="yess"
-is_false_ok=0<1
+is_false_ok = 0 < 1
 while(is_false_ok){
     puts("Never")
     false_result=?(`false`)

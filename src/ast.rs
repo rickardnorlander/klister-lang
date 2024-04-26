@@ -80,8 +80,3 @@ pub enum KlisterStatement {
     While(KlisterExpression, Box<KlisterStatement>),
     If(KlisterExpression, Box<KlisterStatement>, Option<Box<KlisterStatement>>),
 }
-
-pub fn im(a: &str, b: &str, c: &str, d: &[&str]) -> KlisterStatement {
-    return KlisterStatement::Import(a.to_string(), b.to_string(), c.to_string(), d.iter().map(|x|x.to_string()).collect());
-}
-
