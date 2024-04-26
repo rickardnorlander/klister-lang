@@ -5,9 +5,10 @@ use std::process::Command;
 use num_bigint::BigInt;
 
 use crate::ast::*;
+use crate::ccall::ffi_call;
 use crate::ccall::Libraries;
 use crate::except::KlisterRTE;
-use crate::ccall::ffi_call;
+use crate::interpret::KlisterValue::Res;
 
 pub struct Context {
     libs: Libraries,
@@ -97,11 +98,8 @@ fn handle_shell_pipeline(sp: &ShellPipelineS) -> ShellResE {
         output_opt = Some(v)
     }
     let output = output_opt.unwrap();
-    println!("{:?}", output);
     ShellResE::SResOk(output)
 }
-
-use crate::interpret::KlisterValue::Res;
 
 fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> Result<KlisterValue, KlisterRTE> {
     match expression {
@@ -269,8 +267,5 @@ fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> Resu
 pub fn interpret_ast(ast: KlisterStatement) {
     let mut context: Context = Context{libs: Libraries::new(), variables: HashMap::new()};
 
-    let res = handle_statement(&mut context, &ast);
-    println!("{:?}", res);
-
-    println!("{:?}", context.variables.get("asdf"));
+    handle_statement(&mut context, &ast).unwrap();
 }
