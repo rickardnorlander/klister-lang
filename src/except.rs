@@ -2,6 +2,7 @@
 
 #[derive(Clone)]
 #[derive(Debug)]
+#[derive(gc::Trace, gc::Finalize)]
 pub struct KlisterRTE {
     pub s: String
 }

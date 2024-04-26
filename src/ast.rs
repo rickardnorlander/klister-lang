@@ -6,6 +6,7 @@ use crate::except::KlisterRTE;
 
 #[derive(Debug)]
 #[derive(Clone)]
+#[derive(gc::Trace, gc::Finalize)]
 pub enum KlisterResult {
     ResOk(Box<KlisterValue>),
     ResErr(Box<KlisterRTE>),
@@ -13,9 +14,10 @@ pub enum KlisterResult {
 
 #[derive(Debug)]
 #[derive(Clone)]
+#[derive(gc::Trace, gc::Finalize)]
 pub enum KlisterValue {
     CS(String),
-    BInt(BigInt),
+    BInt(#[unsafe_ignore_trace] BigInt),
     Bool(bool),
     Bytes(Vec<u8>),
     Exception(Box<KlisterRTE>),
@@ -23,13 +25,12 @@ pub enum KlisterValue {
     ShellRes(ShellResE),
     Nothing,
     CFunction(String),
-    // Just a wrapper around a value for now
-    // todo: Do things properly but lots of work possibly.
-    FakeFunction(Box<KlisterValue>),
+    MemberFunction(gc::Gc<KlisterValue>, String),
 }
 
 #[derive(Clone)]
 #[derive(Debug)]
+#[derive(gc::Trace, gc::Finalize)]
 pub enum ShellResE {
     SResOk(Vec<u8>),
     SResErr(KlisterRTE, Vec<u8>, Option<i32>),

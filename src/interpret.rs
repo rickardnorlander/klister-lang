@@ -10,7 +10,10 @@ use crate::ccall::Libraries;
 use crate::except::KlisterRTE;
 use crate::interpret::KlisterValue::Res;
 
+
+#[derive(gc::Trace, gc::Finalize)]
 pub struct Context {
+    #[unsafe_ignore_trace]
     libs: Libraries,
     variables: HashMap<String, KlisterValue>,
 }
@@ -28,21 +31,21 @@ fn handle_ffi_call(context: &mut Context, fn_name: &str, arguments: &Vec<Klister
 
 fn unpack_cs(kv: KlisterValue) -> Result<String, KlisterRTE> {
     match kv {
-        KlisterValue::CS(lv) => Ok(lv),
+        KlisterValue::CS(ref lv) => Ok(lv.clone()),
         _ => Err(KlisterRTE::from_str("Type error")),
     }
 }
 
 fn unpack_int(kv: KlisterValue) -> Result<BigInt, KlisterRTE> {
     match kv {
-        KlisterValue::BInt(lv) => Ok(lv),
+        KlisterValue::BInt(ref lv) => Ok(lv.clone()),
         _ => Err(KlisterRTE::from_str("Type error")),
     }
 }
 
 fn unpack_bool(kv: KlisterValue) -> Result<bool, KlisterRTE> {
     match kv {
-        KlisterValue::Bool(lv) => Ok(lv),
+        KlisterValue::Bool(ref lv) => Ok(lv.clone()),
         _ => Err(KlisterRTE::from_str("Type error")),
     }
 }
@@ -93,10 +96,10 @@ fn handle_shell_pipeline(sp: &ShellPipelineS) -> ShellResE {
             return ShellResE::SResErr(KlisterRTE::from_str("Failed to write to stdin"), Vec::new(), None);
         }
 
-        let ShellResE::SResOk(v) = scope_result else {
+        let ShellResE::SResOk(ref v) = scope_result else {
             return scope_result;
         };
-        output_opt = Some(v)
+        output_opt = Some(v.clone())
     }
     let output = output_opt.unwrap();
     ShellResE::SResOk(output)
@@ -106,13 +109,25 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
     match expression {
         KlisterExpression::Call(fn_expr, arguments) => {
             let v = handle_expression(context, fn_expr)?;
-            if let KlisterValue::CFunction(fn_name) = v {
-                handle_ffi_call(context, &fn_name, arguments)
-            } else if let KlisterValue::FakeFunction(inner) = v {
-                if arguments.len() != 0 {
-                    return Err(KlisterRTE::from_str("Wrong number of arguments"));
+            if let KlisterValue::CFunction(ref fn_name) = v {
+                handle_ffi_call(context, fn_name, arguments)
+            } else if let KlisterValue::MemberFunction(ref obj, ref r_name) = v {
+                match **obj {
+                    KlisterValue::BInt(ref b) => {
+                        match r_name.as_str() {
+                            "to_string" => {
+                                if arguments.len() != 0 {
+                                    return Err(KlisterRTE::from_str("Wrong number of arguments"));
+                                }
+                                return Ok(KlisterValue::CS(b.to_string()));
+                            }
+                            _ => todo!()
+                        }
+                    }
+                    _ => {
+                        todo!();
+                    }
                 }
-                return Ok(*inner);
             } else {
                 return Err(KlisterRTE::from_str("Object is not callable"));
             }
@@ -129,7 +144,7 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
         KlisterExpression::Dot(obj_expr, subscript) => {
             let obj = handle_expression(context, obj_expr)?;
             match obj {
-                Res(r) => {
+                Res(ref r) => {
                     match subscript.as_str() {
                         "is_ok" => {
                             return Ok(KlisterValue::Bool(matches!(r, KlisterResult::ResOk(_))))
@@ -138,26 +153,26 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
                             let KlisterResult::ResOk(ok) = r else {
                                 return Err(KlisterRTE::from_str("Accessed inactive variant"));
                             };
-                            return Ok(*ok);
+                            return Ok((**ok).clone());
                         }
                         "err_variant" => {
                             let KlisterResult::ResErr(err) = r else {
                                 return Err(KlisterRTE::from_str("Accessed inactive variant"));
                             };
-                            return Ok(KlisterValue::Exception(err));
+                            return Ok(KlisterValue::Exception((*err).clone()));
                         }
                         _ => todo!()
                     }
                 }
-                KlisterValue::BInt(b) => {
+                KlisterValue::BInt(_) => {
                     match subscript.as_str() {
                         "to_string" => {
-                            return Ok(KlisterValue::FakeFunction(Box::new(KlisterValue::CS(b.to_string()))));
+                            return Ok(KlisterValue::MemberFunction(gc::Gc::new(obj), subscript.clone()));
                         }
                         _ => todo!()
                     }
                 }
-                KlisterValue::ShellRes(r) => {
+                KlisterValue::ShellRes(ref r) => {
                     match subscript.as_str() {
                         "is_ok" => {
                             return Ok(KlisterValue::Bool(matches!(r, ShellResE::SResOk(_))))
@@ -165,7 +180,7 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
                         _ => todo!()
                     }
                 }
-                KlisterValue::Bytes(bytes) => {
+                KlisterValue::Bytes(ref bytes) => {
                     match subscript.as_str() {
                         "len" => {
                             return Ok(KlisterValue::BInt(bytes.len().into()))
@@ -264,11 +279,11 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
                 return Ok(KlisterValue::ShellRes(result));
             }
             return match result {
-                ShellResE::SResOk(v) => {
-                    Ok(KlisterValue::Bytes(v))
+                ShellResE::SResOk(ref v) => {
+                    Ok(KlisterValue::Bytes(v.clone()))
                 }
-                ShellResE::SResErr(e, _, _) => {
-                    Err(e)
+                ShellResE::SResErr(ref e, _, _) => {
+                    Err(e.clone())
                 }
             }
         }
