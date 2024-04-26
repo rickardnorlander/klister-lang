@@ -149,7 +149,12 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
             };
         }
         KlisterExpression::Literal(v) => {Ok(v.clone())}
-        KlisterExpression::Variable(v) => {Ok(context.variables.get(v).unwrap().clone())}
+        KlisterExpression::Variable(v) => {
+            match context.variables.get(v) {
+                Some(val) => Ok(val.clone()),
+                None => panic!("Variable not defined: {}", v),
+            }
+        }
         KlisterExpression::Add(left, right) => {
             let lv = unpack_int(handle_expression(context, left)?)?;
             let rv = unpack_int(handle_expression(context, right)?)?;
@@ -199,6 +204,20 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
             let lv = unpack_int(handle_expression(context, left)?)?;
             let rv = unpack_int(handle_expression(context, right)?)?;
             Ok(KlisterValue::Bool(lv!=rv))
+        }
+        KlisterExpression::Or(left, right) => {
+            let lv = unpack_bool(handle_expression(context, left)?)?;
+            let rv = unpack_bool(handle_expression(context, right)?)?;
+            Ok(KlisterValue::Bool(lv||rv))
+        }
+        KlisterExpression::And(left, right) => {
+            let lv = unpack_bool(handle_expression(context, left)?)?;
+            let rv = unpack_bool(handle_expression(context, right)?)?;
+            Ok(KlisterValue::Bool(lv&&rv))
+        }
+        KlisterExpression::Not(expr) => {
+            let v = unpack_bool(handle_expression(context, expr)?)?;
+            Ok(KlisterValue::Bool(!v))
         }
         KlisterExpression::CatchExpr(expr) => {
             let v_opt = handle_expression(context, expr);

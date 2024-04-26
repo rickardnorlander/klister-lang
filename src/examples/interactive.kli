@@ -6,7 +6,7 @@ import libc.so.6 int strlen(cbb)
 puts("Welcome to interactive.kli")
 
 true = 0 < 1
-false = 0 < 0
+false = !true
 stdout = 1
 
 keep_going = true
@@ -20,11 +20,7 @@ while (keep_going) {
     write(stdout, prompt, strlen(prompt))
 
     choice = getchar()
-    valid = choice >= 48
-
-    if (choice > 50) {
-        valid = false
-    }
+    valid = 48 <= choice && choice <= 50
 
     if (valid) {
         should_be_newline = getchar()
@@ -46,8 +42,11 @@ while (keep_going) {
     } else {
         # Skip invalid garbage on line
         last_char = choice
-        while(last_char != 10) {
+        while(last_char != 10 && last_char != -1) {
             last_char = getchar()
+        }
+        if (last_char == -1) {
+            keep_going = false
         }
     }
 }

@@ -123,8 +123,17 @@ fn parse_precedence_5(s: &mut&str) -> anyhow::Result<KlisterExpression> {
     return Ok(ret);
 }
 
-fn parse_precedence_4(s: &mut&str) -> anyhow::Result<KlisterExpression> {
+fn parse_precedence_4point5(s: &mut&str) -> anyhow::Result<KlisterExpression> {
     let parse_next = parse_precedence_5;
+    if consume("!", s).is_ok() {
+        return Ok(KlisterExpression::Not(Box::new(parse_precedence_4point5(s)?)));
+    } else {
+        return parse_next(s);
+    }
+}
+
+fn parse_precedence_4(s: &mut&str) -> anyhow::Result<KlisterExpression> {
+    let parse_next = parse_precedence_4point5;
 
     let mut ret = parse_next(s)?;
     while !s.is_empty() {
@@ -178,13 +187,37 @@ fn parse_precedence_2(s: &mut&str) -> anyhow::Result<KlisterExpression> {
     return Ok(ret);
 }
 
+fn parse_precedence_1point2(s: &mut&str) -> anyhow::Result<KlisterExpression> {
+    let parse_next = parse_precedence_2;
+    let mut ret = parse_next(s)?;
+    if !s.is_empty() {
+        skip_space(s);
+        if consume("&&", s).is_ok() {
+            ret = KlisterExpression::And(Box::new(ret), Box::new(parse_next(s)?));
+        }
+    }
+    return Ok(ret);
+}
+
+fn parse_precedence_1point1(s: &mut&str) -> anyhow::Result<KlisterExpression> {
+    let parse_next = parse_precedence_1point2;
+    let mut ret = parse_next(s)?;
+    if !s.is_empty() {
+        skip_space(s);
+        if consume("||", s).is_ok() {
+            ret = KlisterExpression::Or(Box::new(ret), Box::new(parse_next(s)?));
+        }
+    }
+    return Ok(ret);
+}
+
 fn parse_precedence_1(s: &mut&str) -> anyhow::Result<KlisterExpression> {
     skip_space(s);
     if consume("?", s).is_err() {
-        return parse_precedence_2(s);
+        return parse_precedence_1point1(s);
     }
     consume("(", s)?;
-    let res = KlisterExpression::CatchExpr(Box::new(parse_precedence_2(s)?));
+    let res = KlisterExpression::CatchExpr(Box::new(parse_precedence_1(s)?));
     consume(")", s)?;
     return Ok(res);
 }
@@ -274,7 +307,7 @@ fn parse_while(s: &mut&str) -> anyhow::Result<KlisterStatement> {
     consume("while", s)?;
     skip_space_and_newlines(s)?;
     consume("(", s)?;
-    let expr = parse_precedence_2(s)?;
+    let expr = parse_precedence_1(s)?;
     skip_space_and_newlines(s)?;
     consume(")", s)?;
     let body = parse_block(s)?;
@@ -286,7 +319,7 @@ fn parse_if(s: &mut&str) -> anyhow::Result<KlisterStatement> {
     consume("if", s)?;
     skip_space_and_newlines(s)?;
     consume("(", s)?;
-    let expr = parse_precedence_2(s)?;
+    let expr = parse_precedence_1(s)?;
     skip_space_and_newlines(s)?;
     consume(")", s)?;
     let body = parse_block(s)?;
