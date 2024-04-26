@@ -6,9 +6,11 @@ import libc.so.6 int write(int, cbb, int)
 import libc.so.6 int fsync(int)
 import libc.so.6 int strlen(cbb)
 
+# Comment a
+
 puts ( "Hello boizzz" ) 
 putchar(97)
-puts("Bye")
+puts("Bye")  # Comment
 atoi("1337")
 
 asdf="yess"

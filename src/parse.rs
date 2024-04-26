@@ -59,7 +59,7 @@ fn parse_precedence_6(s: &mut& str) -> anyhow::Result<KlisterExpression> {
     if let Ok(id) = parse_id(s) {
         return Ok(KlisterExpression::Variable(id));
     }
-    return Err(anyhow!(""));
+    return Err(anyhow!("Parse precedence 6 failed at {}", s));
 }
 
 fn parse_id(remaining: &mut& str) -> anyhow::Result<String> {
@@ -202,11 +202,28 @@ fn parse_precedence_0(s: &mut&str) -> anyhow::Result<KlisterStatement> {
     return Ok(KlisterStatement::Expression(parse_precedence_1(s)?));
 }
 
-fn skip_space_and_newlines(s: &mut&str) {
-    while let Some(c) = s.chars().next() {
-        if c != ' ' && c != '\n' {break;}
+fn consume_remaining_line(s: &mut&str) -> anyhow::Result<()> {
+    loop {
+        let Some(c) = s.chars().next() else {return Err(anyhow!("Incomplete line"))};
         *s = &s[c.len_utf8()..];
+        if c == '\n' {
+            return Ok(());
+        }
     }
+}
+
+fn skip_space_and_newlines(s: &mut&str) -> anyhow::Result<()>  {
+    while let Some(c) = s.chars().next() {
+        if c == ' ' || c == '\n' {
+            *s = &s[c.len_utf8()..];
+        } else if c == '#' {
+            *s = &s[c.len_utf8()..];
+            consume_remaining_line(s)?;
+        } else {
+            break;
+        }
+    }
+    Ok(())
 }
 
 fn skip_space(s: &mut&str) {
@@ -219,12 +236,18 @@ fn skip_space(s: &mut&str) {
 fn consume_statement_enders(s: &mut&str) -> anyhow::Result<()> {
     let s_back = *s;
     let mut newline = false;
-    loop {
-        let Some(c) = s.chars().next() else {break;};
+    while let Some(c) = s.chars().next() {
         if c == '\n' {
              newline = true;
-        } else if c != ' ' {
-            break
+        } else if c == ' ' {
+        } else if c == '#' {
+            *s = &s[c.len_utf8()..];
+            consume_remaining_line(s)?;
+            newline = true;
+            continue;
+        }
+        else {
+            break;
         }
         *s = &s[c.len_utf8()..];
     }
@@ -233,9 +256,9 @@ fn consume_statement_enders(s: &mut&str) -> anyhow::Result<()> {
 
 fn parse_block(remaining: &mut&str) -> anyhow::Result<KlisterStatement> {
     let mut ret = Vec::new();
-    skip_space_and_newlines(remaining);
+    skip_space_and_newlines(remaining)?;
     consume("{", remaining)?;
-    skip_space_and_newlines(remaining);
+    skip_space_and_newlines(remaining)?;
     loop {
         if consume("}", remaining).is_ok() {
             return Ok(KlisterStatement::Block(ret));
@@ -246,36 +269,36 @@ fn parse_block(remaining: &mut&str) -> anyhow::Result<KlisterStatement> {
 }
 
 fn parse_while(s: &mut&str) -> anyhow::Result<KlisterStatement> {
-    skip_space_and_newlines(s);
+    skip_space_and_newlines(s)?;
     consume("while", s)?;
-    skip_space_and_newlines(s);
+    skip_space_and_newlines(s)?;
     consume("(", s)?;
     let expr = parse_precedence_2(s)?;
-    skip_space_and_newlines(s);
+    skip_space_and_newlines(s)?;
     consume(")", s)?;
     let body = parse_block(s)?;
     return Ok(KlisterStatement::While(expr, Box::new(body)));
 }
 
 fn parse_if(s: &mut&str) -> anyhow::Result<KlisterStatement> {
-    skip_space_and_newlines(s);
+    skip_space_and_newlines(s)?;
     consume("if", s)?;
-    skip_space_and_newlines(s);
+    skip_space_and_newlines(s)?;
     consume("(", s)?;
     let expr = parse_precedence_2(s)?;
-    skip_space_and_newlines(s);
+    skip_space_and_newlines(s)?;
     consume(")", s)?;
     let body = parse_block(s)?;
 
     let mut s2_x = *s;
     let s2 = &mut s2_x;
-    skip_space_and_newlines(s2);
+    skip_space_and_newlines(s2)?;
     let elseres = consume("else", s2);
     if elseres.is_err() {
         return Ok(KlisterStatement::If(expr, Box::new(body), None));
     }
 
-    skip_space_and_newlines(s);
+    skip_space_and_newlines(s)?;
     consume("else", s)?;
     let elsebody = parse_block(s)?;
 
@@ -355,7 +378,7 @@ fn parse_shell_main(s: &mut&str) -> anyhow::Result<KlisterExpression> {
 }
 
 fn parse_statement(remaining: &mut&str) -> anyhow::Result<KlisterStatement> {
-    skip_space_and_newlines(remaining);
+    skip_space_and_newlines(remaining)?;
     static IMPORT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^import ").unwrap());
     static WHILE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^while[ (]").unwrap());
     static IF_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^if[ (]").unwrap());
@@ -372,7 +395,7 @@ fn parse_statement(remaining: &mut&str) -> anyhow::Result<KlisterStatement> {
 
 fn parse_statements(remaining: &mut&str) -> anyhow::Result<Vec<KlisterStatement>> {
     let mut ret = Vec::new();
-    skip_space_and_newlines(remaining);
+    skip_space_and_newlines(remaining)?;
     while !remaining.is_empty() {
         ret.push(parse_statement(remaining)?);
         consume_statement_enders(remaining)?;

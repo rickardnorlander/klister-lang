@@ -27,7 +27,7 @@ fn main() {
     let ast_res = parse_ast(&contents);
     let Ok(ast) = ast_res else {
         if let Err(error) = ast_res {
-            println!("{:?}", error);
+            println!("Ast parse error {:?}", error);
         }
         panic!();
     };
