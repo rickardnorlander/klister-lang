@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use gc::Gc;
 use num_bigint::BigInt;
 
 use crate::except::KlisterRTE;
@@ -8,7 +9,7 @@ use crate::except::KlisterRTE;
 #[derive(Clone)]
 #[derive(gc::Trace, gc::Finalize)]
 pub enum KlisterResult {
-    ResOk(Box<KlisterValue>),
+    ResOk(Gc<KlisterValue>),
     ResErr(Box<KlisterRTE>),
 }
 
@@ -22,7 +23,7 @@ pub enum KlisterValue {
     Bytes(Vec<u8>),
     Exception(Box<KlisterRTE>),
     Res(KlisterResult),
-    ShellRes(ShellResE),
+    ShellRes(#[unsafe_ignore_trace] ShellResE),
     Nothing,
     CFunction(String),
     MemberFunction(gc::Gc<KlisterValue>, String),
@@ -30,7 +31,6 @@ pub enum KlisterValue {
 
 #[derive(Clone)]
 #[derive(Debug)]
-#[derive(gc::Trace, gc::Finalize)]
 pub enum ShellResE {
     SResOk(Vec<u8>),
     SResErr(KlisterRTE, Vec<u8>, Option<i32>),
