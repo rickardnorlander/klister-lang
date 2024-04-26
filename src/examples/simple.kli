@@ -4,7 +4,6 @@ import libc.so.6 int getchar()
 import libc.so.6 int atoi(cbc)
 import libc.so.6 int write(int, cbb, int)
 import libc.so.6 int fsync(int)
-import libc.so.6 int strlen(cbb)
 
 # Comment a
 
@@ -25,9 +24,8 @@ putchar(asdf[1])
 puts("")
 asdf=atoi("10")
 
-b=`echo -en    hello world\\n\\0 | tr a-z A-Z|tail -c 7` 
-c=strlen(b)
-write(2,b,c)
+b=`echo hello world | tr a-z A-Z|tail -c 6` 
+write(2,b,b.len)
 fsync(2)
 
 while(0<asdf){

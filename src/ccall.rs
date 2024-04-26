@@ -120,11 +120,8 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Kliste
                 let myref: &u8 = arg_storage.last().unwrap().first().unwrap();
                 args.push(arg(myref));
             }
-            KlisterValue::Bytes(x) => {
-                let xclone = x.clone();
-                CStr::from_bytes_with_nul(&xclone).expect("Validation as c string failed");
-                arg_storage.push(xclone);
-                ptr_storage.push(Box::new(arg_storage.last().unwrap().as_ptr() as *mut c_void));
+            KlisterValue::Bytes(ref x) => {
+                ptr_storage.push(Box::new(x.as_ptr() as *mut c_void));
                 args.push(arg(ptr_storage.last().unwrap().as_ref()));
             }
             KlisterValue::Bool(_) => {

@@ -161,14 +161,14 @@ fn parse_precedence_2(s: &mut&str) -> anyhow::Result<KlisterExpression> {
     let mut ret = parse_next(s)?;
     if !s.is_empty() {
         skip_space(s);
-        if consume("<", s).is_ok() {
-            ret = KlisterExpression::Lt(Box::new(ret), Box::new(parse_next(s)?));
-        } else if consume(">", s).is_ok() {
-            ret = KlisterExpression::Gt(Box::new(ret), Box::new(parse_next(s)?));
-        } else if consume("<=", s).is_ok() {
+        if consume("<=", s).is_ok() {
             ret = KlisterExpression::Lte(Box::new(ret), Box::new(parse_next(s)?));
         } else if consume(">=", s).is_ok() {
             ret = KlisterExpression::Gte(Box::new(ret), Box::new(parse_next(s)?));
+        } else if consume("<", s).is_ok() {
+            ret = KlisterExpression::Lt(Box::new(ret), Box::new(parse_next(s)?));
+        } else if consume(">", s).is_ok() {
+            ret = KlisterExpression::Gt(Box::new(ret), Box::new(parse_next(s)?));
         } else if consume("==", s).is_ok() {
             ret = KlisterExpression::Eq(Box::new(ret), Box::new(parse_next(s)?));
         } else if consume("!=", s).is_ok() {
@@ -194,6 +194,7 @@ fn parse_precedence_0(s: &mut&str) -> anyhow::Result<KlisterStatement> {
     let s2:&mut&str = &mut s2_x;
     let idid = parse_id(s2);
     skip_space(s2);
+    // todo: Need to handle == 
     if idid.is_ok() && consume("=", s2).is_ok() {
         let ret = KlisterStatement::Assign(idid?, parse_precedence_1(s2)?);
         *s = *s2;

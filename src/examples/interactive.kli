@@ -1,0 +1,53 @@
+import libc.so.6 int puts(cbc)
+import libc.so.6 int getchar()
+import libc.so.6 int write(int, cbb, int)
+import libc.so.6 int strlen(cbb)
+
+puts("Welcome to interactive.kli")
+
+true = 0 < 1
+false = 0 < 0
+stdout = 1
+
+keep_going = true
+
+while (keep_going) {
+    puts("What do you want to do?")
+    puts("(0) Exit")
+    puts("(1) Run ls")
+    puts("(2) Run lsb_release -a")
+    prompt = "Your choice: "
+    write(stdout, prompt, strlen(prompt))
+
+    choice = getchar()
+    valid = choice >= 48
+
+    if (choice > 50) {
+        valid = false
+    }
+
+    if (valid) {
+        should_be_newline = getchar()
+        valid = should_be_newline == 10
+    }
+
+    if (valid) {
+        if (choice == 48) {
+            keep_going = false
+        }
+        if (choice == 49) {
+            output = `ls`
+            write(stdout, output, output.len)
+        }
+        if (choice == 50) {
+            output = `lsb_release -a`
+            write(stdout, output, output.len)
+        }
+    } else {
+        # Skip invalid garbage on line
+        last_char = choice
+        while(last_char != 10) {
+            last_char = getchar()
+        }
+    }
+}

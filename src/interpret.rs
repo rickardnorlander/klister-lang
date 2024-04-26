@@ -137,6 +137,14 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
                         _ => todo!()
                     }
                 }
+                KlisterValue::Bytes(bytes) => {
+                    match subscript.as_str() {
+                        "len" => {
+                            return Ok(KlisterValue::BInt(bytes.len().into()))
+                        }
+                        _ => todo!()
+                    }
+                }
                 _ => todo!()
             };
         }
