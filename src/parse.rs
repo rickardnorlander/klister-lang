@@ -24,6 +24,14 @@ fn parse_import(remaining: &mut &str) -> anyhow::Result<KlisterStatement> {
     return Ok(KlisterStatement::Import(caps[1].to_string(), caps[3].to_string(), caps[2].to_string(), args));
 }
 
+fn parse_catch_expr(s: &mut&str) -> anyhow::Result<KlisterExpression> {
+    skip_space(s);
+    consume("?(", s)?;
+    let res = KlisterExpression::CatchExpr(Box::new(parse_precedence_1(s)?));
+    consume(")", s)?;
+    return Ok(res);
+}
+
 fn parse_precedence_6(s: &mut& str) -> anyhow::Result<KlisterExpression> {
     skip_space(s);
 
@@ -54,6 +62,11 @@ fn parse_precedence_6(s: &mut& str) -> anyhow::Result<KlisterExpression> {
     static SHELL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^`").unwrap());
     if SHELL_RE.is_match(s) {
         return parse_shell_main(s);
+    }
+
+    static CATCH_EXPR_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\?\(").unwrap());
+    if CATCH_EXPR_RE.is_match(s) {
+        return parse_catch_expr(s);
     }
 
     if let Ok(id) = parse_id(s) {
@@ -199,7 +212,7 @@ fn parse_precedence_1point2(s: &mut&str) -> anyhow::Result<KlisterExpression> {
     return Ok(ret);
 }
 
-fn parse_precedence_1point1(s: &mut&str) -> anyhow::Result<KlisterExpression> {
+fn parse_precedence_1(s: &mut&str) -> anyhow::Result<KlisterExpression> {
     let parse_next = parse_precedence_1point2;
     let mut ret = parse_next(s)?;
     if !s.is_empty() {
@@ -209,17 +222,6 @@ fn parse_precedence_1point1(s: &mut&str) -> anyhow::Result<KlisterExpression> {
         }
     }
     return Ok(ret);
-}
-
-fn parse_precedence_1(s: &mut&str) -> anyhow::Result<KlisterExpression> {
-    skip_space(s);
-    if consume("?", s).is_err() {
-        return parse_precedence_1point1(s);
-    }
-    consume("(", s)?;
-    let res = KlisterExpression::CatchExpr(Box::new(parse_precedence_1(s)?));
-    consume(")", s)?;
-    return Ok(res);
 }
 
 fn parse_precedence_0(s: &mut&str) -> anyhow::Result<KlisterStatement> {

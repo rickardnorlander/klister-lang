@@ -6,28 +6,22 @@ import libc.so.6 int write(int, cbb, int)
 import libc.so.6 int fsync(int)
 
 # Comment a
-
-puts ( "Hello boizzz" ) 
-putchar(97)
 puts("Bye")  # Comment
-atoi("1337")
 
-asdf="yess"
 is_false_ok = 0 < 1
 while(is_false_ok){
     puts("Never")
-    false_result=?(`false`)
-    is_false_ok=false_result.is_ok
+    is_false_ok = ?(`false`).is_ok
 }
-puts(asdf)
+asdf="yess"
 putchar(asdf[1])
-puts("")
-asdf=atoi("10")
+puts(asdf)
 
 b=`echo hello world | tr a-z A-Z|tail -c 6` 
 write(2,b,b.len)
 fsync(2)
 
+asdf=atoi("10")
 while(0<asdf){
     puts("Looping")
     asdf=asdf-1 
@@ -39,3 +33,5 @@ if(asdf<-2){
 }
 asdf=atoi("10")
 asdf=asdf*3-2+2/2+atoi("11")
+putchar(asdf)
+putchar(10)
