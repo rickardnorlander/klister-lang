@@ -22,8 +22,7 @@ fn main() {
         parser.parse_args_or_exit();
     }
 
-    let contents = fs::read_to_string(&command)
-        .expect("Couldn't read script");
+    let contents = fs::read_to_string(&command).expect("Couldn't read script");
 
     let ast_res = parse_ast(&contents);
     let Ok(ast) = ast_res else {

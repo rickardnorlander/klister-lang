@@ -20,16 +20,42 @@ pub enum KlisterValue {
     Bytes(Vec<u8>),
     Exception,
     Res(KlisterResult),
+    ShellRes(ShellResE),
     Nothing,
 }
+
+#[derive(Clone)]
+#[derive(Debug)]
+pub enum ShellResE {
+    SResOk(Vec<u8>),
+    SResErr(KlisterRTE, Vec<u8>, Option<i32>),
+}
+
 
 #[derive(Debug)]
 pub struct ShellCommand{pub command: String, pub args: Vec<String>}
 
 #[derive(Debug)]
+pub struct ShellPipelineS {
+    pub commands: Vec<ShellCommand>,
+    pub is_catch: bool,
+}
+
+impl ShellPipelineS {
+    pub fn new(cmds: Vec<ShellCommand>) -> ShellPipelineS {
+        ShellPipelineS{commands: cmds, is_catch: false}
+    }
+
+    pub fn catching(cmds: Vec<ShellCommand>) -> ShellPipelineS {
+        ShellPipelineS{commands: cmds, is_catch: true}
+    }
+}
+
+#[derive(Debug)]
 pub enum KlisterExpression {
-    Call(String, Vec<KlisterExpression>),
+    Call(Box<KlisterExpression>, Vec<KlisterExpression>),
     Index(Box<KlisterExpression>, Box<KlisterExpression>),
+    Dot(Box<KlisterExpression>, String),
     Add(Box<KlisterExpression>, Box<KlisterExpression>),
     Sub(Box<KlisterExpression>, Box<KlisterExpression>),
     Mul(Box<KlisterExpression>, Box<KlisterExpression>),
@@ -40,10 +66,10 @@ pub enum KlisterExpression {
     Lte(Box<KlisterExpression>, Box<KlisterExpression>),
     Gte(Box<KlisterExpression>, Box<KlisterExpression>),
     Ne(Box<KlisterExpression>, Box<KlisterExpression>),
-    Catch(Box<KlisterExpression>),
+    CatchExpr(Box<KlisterExpression>),
     Variable(String),
     Literal(KlisterValue),
-    ShellPipeline(Vec<ShellCommand>),
+    ShellPipeline(ShellPipelineS),
 }
 
 pub enum KlisterStatement {
@@ -52,7 +78,6 @@ pub enum KlisterStatement {
     Expression(KlisterExpression),
     Block(Vec<KlisterStatement>),
     While(KlisterExpression, Box<KlisterStatement>),
-    Shell(String, Vec<String>,),
     If(KlisterExpression, Box<KlisterStatement>, Option<Box<KlisterStatement>>),
 }
 

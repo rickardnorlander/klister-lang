@@ -12,7 +12,12 @@ puts("Bye")
 atoi("1337")
 
 asdf="yess"
-?(`false`)
+is_false_ok=0<1
+while(is_false_ok){
+    puts("Never")
+    false_result=?(`false`)
+    is_false_ok=false_result.is_ok
+}
 puts(asdf)
 putchar(asdf[1])
 puts("")

@@ -6,11 +6,17 @@ use std::ffi::c_char;
 use std::ffi::c_int;
 use std::ffi::c_long;
 use std::ffi::CString;
+use std::ffi::CStr;
 
+use libffi::low;
+use libffi::middle::arg;
+use libffi::middle::Arg;
 use libffi::middle::Cif;
 
-use crate::types::TypeTag;
 
+use crate::ast::KlisterValue;
+use crate::except::KlisterRTE;
+use crate::types::TypeTag;
 
 type LmidT = c_long;
 
@@ -41,13 +47,6 @@ pub struct Libraries {
     lmid: LmidT,
 }
 
-/*pub fn get_type_and_size(t: &str) -> (Type, usize) {
-    match t {
-        "cbc" => (Type::pointer(), mem::size_of::<*const c_void>()),
-        "int" => (Type::c_int(), mem::size_of::<c_int>()),
-        _ => panic!("Unknown type"),
-    }
-}*/
 
 impl Libraries {
     pub fn new() -> Libraries {
@@ -94,4 +93,74 @@ impl Libraries {
 
         self.functions.insert(fname.to_string(), FunctionData{ptr: function, cif, retstr: rettypename.to_string(), args: argcopy});
     }
+}
+
+
+pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<KlisterValue>) -> Result<KlisterValue, KlisterRTE> {
+    let mut args = Vec::<Arg>::new();
+    let mut arg_storage = Vec::<Vec<u8>>::new();
+    let mut ptr_storage = Vec::<Box<*mut c_void>>::new();
+
+    for v in &argument_values {
+        match v {
+            KlisterValue::CS(x) => {
+                let mut st = Vec::with_capacity(x.len() + 1);
+                st.extend(x.as_bytes());
+                st.push(0);
+                CStr::from_bytes_with_nul(&st).expect("Validation as c string failed");
+                arg_storage.push(st);
+                ptr_storage.push(Box::new(arg_storage.last().unwrap().as_ptr() as *mut c_void));
+                args.push(arg(ptr_storage.last().unwrap().as_ref()));
+            }
+            KlisterValue::Int(ref x) => {
+                args.push(arg(x));
+            }
+            KlisterValue::Bytes(x) => {
+                let xclone = x.clone();
+                CStr::from_bytes_with_nul(&xclone).expect("Validation as c string failed");
+                arg_storage.push(xclone);
+                ptr_storage.push(Box::new(arg_storage.last().unwrap().as_ptr() as *mut c_void));
+                args.push(arg(ptr_storage.last().unwrap().as_ref()));
+            }
+            KlisterValue::Bool(_) => {
+                todo!();
+            }
+            KlisterValue::Exception => {
+                return Err(KlisterRTE::from_str("Can't pass exception to c-api"));
+            }
+            KlisterValue::Res(_) => {
+                return Err(KlisterRTE::from_str("Can't pass res to c-api"));
+            }
+            KlisterValue::ShellRes(_) => {
+                return Err(KlisterRTE::from_str("Can't pass shellres to c-api"));
+            }
+            KlisterValue::Nothing => {
+                return Err(KlisterRTE::from_str("Can't pass 'nothing' to c-api"));
+            }
+        }
+    }
+
+
+    let fn_data = libs.functions.get(&fn_name as &str).unwrap();
+    let FunctionData{ptr: fn_ptr, cif, retstr: rettypename, args:_} = fn_data;
+    let codeptr = low::CodePtr::from_ptr(*fn_ptr);
+
+    let tt = TypeTag::from_string(&rettypename);
+    let mut result = vec![0u8; tt.size()];
+
+    unsafe {
+        libffi::raw::ffi_call(cif.as_raw_ptr(), Some(*codeptr.as_fun()), result.as_mut_ptr() as *mut c_void, (&args).as_ptr() as *mut *mut c_void);
+    }
+
+    let ret = match rettypename.as_str() {
+        "int" => Ok(KlisterValue::Int(i32::from_ne_bytes(result.try_into().unwrap()))), // TODO: should check int is 32bits.
+            _ => Err(KlisterRTE::new())
+    };
+
+    // There are pointers into these structures.
+    // So use explicit drops to make sure the values live until this point.
+    drop(arg_storage);
+    drop(ptr_storage);
+    drop(argument_values);
+    return ret;
 }

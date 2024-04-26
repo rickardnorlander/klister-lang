@@ -1,10 +1,12 @@
+#![allow(unused_assignments)]
+
 use crate::ast::*;
 use regex::Regex;
 use once_cell::sync::Lazy;
 use anyhow::anyhow;
 use anyhow::Context;
 
-pub fn parse_import(remaining: &mut &str) -> anyhow::Result<KlisterStatement> {
+fn parse_import(remaining: &mut &str) -> anyhow::Result<KlisterStatement> {
     static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^import ([a-z0-9.]+) ([a-z0-9.]+) ([a-z][a-z0-9]*)\(((?:[a-z, ]+)?)\)").unwrap());
     let caps = RE.captures(remaining).unwrap();
     let args = if caps[4].trim() == "" {
@@ -17,10 +19,10 @@ pub fn parse_import(remaining: &mut &str) -> anyhow::Result<KlisterStatement> {
     return Ok(im(&caps[1], &caps[3], &caps[2], &args));
 }
 
-pub fn parse_literal2(s: &mut& str) -> anyhow::Result<KlisterExpression> {
+fn parse_precedence_6(s: &mut& str) -> anyhow::Result<KlisterExpression> {
     let mut in_chars = s.char_indices();
 
-    let first_char = in_chars.next().context("Empty string in parse_literal2")?.1;
+    let first_char = in_chars.next().context("Empty string")?.1;
 
     if first_char == '"' {
         let mut out_str = String::new();
@@ -53,7 +55,7 @@ pub fn parse_literal2(s: &mut& str) -> anyhow::Result<KlisterExpression> {
     return Err(anyhow!(""));
 }
 
-pub fn parse_id(remaining: &mut& str) -> anyhow::Result<String> {
+fn parse_id(remaining: &mut& str) -> anyhow::Result<String> {
     //let in_chars = s.chars().collect::<Vec<_>>();
     static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([A-Za-z_][A-Za-z0-9_]*)").unwrap());
     let caps = RE.captures(remaining).context("Failed to parse id")?;
@@ -62,68 +64,63 @@ pub fn parse_id(remaining: &mut& str) -> anyhow::Result<String> {
     return Ok(result.to_string());
 }
 
-pub fn consume(tocon: &str, remaining: &mut&str) -> anyhow::Result<()> {
-    if remaining.is_empty() || remaining.len() < tocon.len() { return Err(anyhow!(""))};
-    for (a, b) in tocon.chars().zip(remaining.chars()) {
+fn consume(prefix: &str, remaining: &mut&str) -> anyhow::Result<()> {
+    if remaining.is_empty() || remaining.len() < prefix.len() { return Err(anyhow!(""))};
+    for (a, b) in prefix.chars().zip(remaining.chars()) {
         if a != b {
             return Err(anyhow!(""));
         }
     }
-    *remaining = &remaining[tocon.len()..];
+    *remaining = &remaining[prefix.len()..];
     return Ok(());
 }
 
-pub fn parse_call(remaining: &mut& str) -> anyhow::Result<KlisterExpression> {
-    let fnname = parse_id(remaining)?;
-    consume("(", remaining)?;
+fn parse_call_args(remaining: &mut& str) -> anyhow::Result<Vec::<KlisterExpression>> {
     let mut args = Vec::<KlisterExpression>::new();
-    let arg0_r = parse_add(remaining);
+
+    let parse_arg = parse_precedence_1;
+
+    let arg0_r = parse_arg(remaining);
     if let Ok(arg0) = arg0_r {
         args.push(arg0);
         loop {
             if consume(",", remaining).is_err() {
                 break;
             }
-            args.push(parse_add(remaining)?);
+            args.push(parse_arg(remaining)?);
         }
     }
-    consume(")", remaining)?;
-    return Ok(KlisterExpression::Call(fnname, args));
+    return Ok(args);
 }
 
-pub fn parse_index(remaining: &mut&str) -> anyhow::Result<KlisterExpression> {
-    let arr = parse_id(remaining)?;
-    consume("[", remaining)?;
-    let index = parse_literal2(remaining);
-    consume("]", remaining)?;
-    return Ok(KlisterExpression::Index(Box::new(KlisterExpression::Variable(arr)), Box::new(index?)));
+fn parse_precedence_5(s: &mut&str) -> anyhow::Result<KlisterExpression> {
+    let mut ret = parse_precedence_6(s)?;
+    while !s.is_empty() {
+        if consume(".", s).is_ok() {
+            ret = KlisterExpression::Dot(Box::new(ret), parse_id(s)?);
+        } else if consume("(", s).is_ok() {
+            ret = KlisterExpression::Call(Box::new(ret), parse_call_args(s)?);
+            consume(")", s)?;
+        } else if consume("[", s).is_ok() {
+            let index = parse_precedence_1(s);
+            ret = KlisterExpression::Index(Box::new(ret), Box::new(index?));
+            consume("]", s)?;
+        } else {
+            break;
+        }
+    }
+    return Ok(ret);
 }
 
-pub fn parse_call_or_lower(s: &mut&str) -> anyhow::Result<KlisterExpression> {
-    let mut s2_x = *s;
-    let s2:&mut&str = &mut s2_x;
-    let idid = parse_id(s2);
-    if s2.chars().next() == Some('[') {
-        //panic!("{:?}", idid);
-    }
-    if idid.is_ok() && consume("(", s2).is_ok() {
-        return parse_call(s);
-    }
-    if idid.is_ok() && consume("[", s2).is_ok() {
-        return parse_index(s);
-    }
-    return parse_literal2(s);
-}
+fn parse_precedence_4(s: &mut&str) -> anyhow::Result<KlisterExpression> {
+    let parse_next = parse_precedence_5;
 
-pub fn parse_mul(s: &mut&str) -> anyhow::Result<KlisterExpression> {
-    let parse_lower = parse_call_or_lower;
-
-    let mut ret = parse_lower(s)?;
+    let mut ret = parse_next(s)?;
     while !s.is_empty() {
         if consume("*", s).is_ok() {
-            ret = KlisterExpression::Mul(Box::new(ret), Box::new(parse_lower(s)?));
+            ret = KlisterExpression::Mul(Box::new(ret), Box::new(parse_next(s)?));
         } else if consume("/", s).is_ok() {
-            ret = KlisterExpression::Div(Box::new(ret), Box::new(parse_lower(s)?));
+            ret = KlisterExpression::Div(Box::new(ret), Box::new(parse_next(s)?));
         } else {
             break;
         }
@@ -131,13 +128,14 @@ pub fn parse_mul(s: &mut&str) -> anyhow::Result<KlisterExpression> {
     return Ok(ret);
 }
 
-pub fn parse_add(s: &mut&str) -> anyhow::Result<KlisterExpression> {
-    let mut ret = parse_mul(s)?;
+fn parse_precedence_3(s: &mut&str) -> anyhow::Result<KlisterExpression> {
+    let parse_next = parse_precedence_4;
+    let mut ret = parse_next(s)?;
     while !s.is_empty() {
         if consume("+", s).is_ok() {
-            ret = KlisterExpression::Add(Box::new(ret), Box::new(parse_mul(s)?));
+            ret = KlisterExpression::Add(Box::new(ret), Box::new(parse_next(s)?));
         } else if consume("-", s).is_ok() {
-            ret = KlisterExpression::Sub(Box::new(ret), Box::new(parse_mul(s)?));
+            ret = KlisterExpression::Sub(Box::new(ret), Box::new(parse_next(s)?));
         } else {
             break;
         }
@@ -145,49 +143,50 @@ pub fn parse_add(s: &mut&str) -> anyhow::Result<KlisterExpression> {
     return Ok(ret);
 }
 
-pub fn parse_lt(s: &mut&str) -> anyhow::Result<KlisterExpression> {
-    let mut ret = parse_add(s)?;
+fn parse_precedence_2(s: &mut&str) -> anyhow::Result<KlisterExpression> {
+    let parse_next = parse_precedence_3;
+    let mut ret = parse_next(s)?;
     if !s.is_empty() {
         if consume("<", s).is_ok() {
-            ret = KlisterExpression::Lt(Box::new(ret), Box::new(parse_add(s)?));
+            ret = KlisterExpression::Lt(Box::new(ret), Box::new(parse_next(s)?));
         } else if consume(">", s).is_ok() {
-            ret = KlisterExpression::Gt(Box::new(ret), Box::new(parse_add(s)?));
+            ret = KlisterExpression::Gt(Box::new(ret), Box::new(parse_next(s)?));
         } else if consume("<=", s).is_ok() {
-            ret = KlisterExpression::Lte(Box::new(ret), Box::new(parse_add(s)?));
+            ret = KlisterExpression::Lte(Box::new(ret), Box::new(parse_next(s)?));
         } else if consume(">=", s).is_ok() {
-            ret = KlisterExpression::Gte(Box::new(ret), Box::new(parse_add(s)?));
+            ret = KlisterExpression::Gte(Box::new(ret), Box::new(parse_next(s)?));
         } else if consume("==", s).is_ok() {
-            ret = KlisterExpression::Eq(Box::new(ret), Box::new(parse_add(s)?));
+            ret = KlisterExpression::Eq(Box::new(ret), Box::new(parse_next(s)?));
         } else if consume("!=", s).is_ok() {
-            ret = KlisterExpression::Ne(Box::new(ret), Box::new(parse_add(s)?));
+            ret = KlisterExpression::Ne(Box::new(ret), Box::new(parse_next(s)?));
         }
     }
     return Ok(ret);
 }
 
-pub fn parse_catch(s: &mut&str) -> anyhow::Result<KlisterExpression> {
+fn parse_precedence_1(s: &mut&str) -> anyhow::Result<KlisterExpression> {
     if consume("?", s).is_err() {
-        return parse_lt(s);
+        return parse_precedence_2(s);
     }
     consume("(", s)?;
-    let res = KlisterExpression::Catch(Box::new(parse_lt(s)?));
+    let res = KlisterExpression::CatchExpr(Box::new(parse_precedence_2(s)?));
     consume(")", s)?;
     return Ok(res);
 }
 
-pub fn parse_assignment_or_lower(s: &mut&str) -> anyhow::Result<KlisterStatement> {
+fn parse_precedence_0(s: &mut&str) -> anyhow::Result<KlisterStatement> {
     let mut s2_x = *s;
     let s2:&mut&str = &mut s2_x;
     let idid = parse_id(s2);
     if idid.is_ok() && consume("=", s2).is_ok() {
-        let ret = KlisterStatement::Assign(idid?, parse_catch(s2)?);
+        let ret = KlisterStatement::Assign(idid?, parse_precedence_1(s2)?);
         *s = *s2;
         return Ok(ret);
     }
-    return Ok(KlisterStatement::Expression(parse_catch(s)?));
+    return Ok(KlisterStatement::Expression(parse_precedence_1(s)?));
 }
 
-pub fn skip_space_and_newlines(s: &mut&str) {
+fn skip_space_and_newlines(s: &mut&str) {
     loop {
         let Some(c) = s.chars().next() else {break;};
         if c != ' ' && c != '\n' {break;}
@@ -195,7 +194,7 @@ pub fn skip_space_and_newlines(s: &mut&str) {
     }
 }
 
-pub fn consume_statement_enders(s: &mut&str) -> anyhow::Result<()> {
+fn consume_statement_enders(s: &mut&str) -> anyhow::Result<()> {
     let s_back = *s;
     let mut newline = false;
     loop {
@@ -210,7 +209,7 @@ pub fn consume_statement_enders(s: &mut&str) -> anyhow::Result<()> {
     return if newline {Ok(())} else {Err(anyhow!("No statement ender found {}", s_back))};
 }
 
-pub fn parse_block(remaining: &mut&str) -> anyhow::Result<KlisterStatement> {
+fn parse_block(remaining: &mut&str) -> anyhow::Result<KlisterStatement> {
     let mut ret = Vec::new();
     consume("{", remaining)?;
     skip_space_and_newlines(remaining);
@@ -223,21 +222,21 @@ pub fn parse_block(remaining: &mut&str) -> anyhow::Result<KlisterStatement> {
     }
 }
 
-pub fn parse_while(s: &mut&str) -> anyhow::Result<KlisterStatement> {
+fn parse_while(s: &mut&str) -> anyhow::Result<KlisterStatement> {
     consume("while", s)?;
     skip_space_and_newlines(s);
     consume("(", s)?;
-    let expr = parse_lt(s).expect("Todo");
+    let expr = parse_precedence_2(s).expect("Todo");
     consume(")", s)?;
     let body = parse_block(s)?;
     return Ok(KlisterStatement::While(expr, Box::new(body)));
 }
 
-pub fn parse_if(s: &mut&str) -> anyhow::Result<KlisterStatement> {
+fn parse_if(s: &mut&str) -> anyhow::Result<KlisterStatement> {
     consume("if", s)?;
     skip_space_and_newlines(s);
     consume("(", s)?;
-    let expr = parse_lt(s).expect("Todo");
+    let expr = parse_precedence_2(s).expect("Todo");
     consume(")", s)?;
     let body = parse_block(s)?;
 
@@ -254,7 +253,7 @@ pub fn parse_if(s: &mut&str) -> anyhow::Result<KlisterStatement> {
     return Ok(KlisterStatement::If(expr, Box::new(body), Some(Box::new(elsebody))));
 }
 
-pub fn parse_shell_token(s: &mut&str) -> anyhow::Result<Option<String>> {
+fn parse_shell_token(s: &mut&str) -> anyhow::Result<Option<String>> {
     let mut ret = String::new();
     let mut charss = s.chars();
     loop {
@@ -263,7 +262,13 @@ pub fn parse_shell_token(s: &mut&str) -> anyhow::Result<Option<String>> {
             break;
         } else if c == '\\' {
             let c2 = charss.next().context("Incomplete escape")?;
-            ret.push(c2);
+            if c2 == '\\' {
+                ret.push('\\');
+            } else if c2 == 'n' {
+                ret.push('\n');
+            } else {
+                return Err(anyhow!("Unknown escape sequence"));
+            }
             
             *s = &s[c.len_utf8() + c2.len_utf8()..];
         } else {
@@ -274,18 +279,16 @@ pub fn parse_shell_token(s: &mut&str) -> anyhow::Result<Option<String>> {
     if !ret.is_empty() {return Ok(Some(ret));} else {return Ok(None)}
 }
 
-pub fn skip_shell_separators(s: &mut&str) {
-    let mut charss = s.chars();
-    loop {
-        let Some(c) = charss.next() else {break;};
-        if c != ' ' && c != '\n' {
+fn skip_shell_separators(s: &mut&str) {
+    while let Some(c) = s.chars().next() {
+        if c != ' ' {
             break;
         }
         *s = &s[c.len_utf8()..];
     }
 }
 
-pub fn parse_shell_command(s: &mut&str) -> anyhow::Result<ShellCommand> {
+fn parse_shell_command(s: &mut&str) -> anyhow::Result<ShellCommand> {
     let mut shell_tokens = Vec::new();
     loop {
         skip_shell_separators(s);
@@ -302,7 +305,8 @@ pub fn parse_shell_command(s: &mut&str) -> anyhow::Result<ShellCommand> {
     return Ok(ShellCommand{command:cmd, args});
 }
 
-pub fn parse_shell_main(s: &mut&str) -> anyhow::Result<KlisterExpression> {
+fn parse_shell_main(s: &mut&str) -> anyhow::Result<KlisterExpression> {
+    // todo: Possibly rethink newline handling in shell environment.
     consume("`", s)?;
     let mut cmds = Vec::<ShellCommand>::new();
     skip_shell_separators(s);
@@ -317,10 +321,10 @@ pub fn parse_shell_main(s: &mut&str) -> anyhow::Result<KlisterExpression> {
         cmds.push(parse_shell_command_res?);
     }
     if cmds.len() == 0 {return Err(anyhow!("No cmds"))};
-    return Ok(KlisterExpression::ShellPipeline(cmds))
+    return Ok(KlisterExpression::ShellPipeline(ShellPipelineS::new(cmds)))
 }
 
-pub fn parse_statement(remaining: &mut&str) -> anyhow::Result<KlisterStatement> {
+fn parse_statement(remaining: &mut&str) -> anyhow::Result<KlisterStatement> {
     static IMPORT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^import ").unwrap());
     static WHILE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^while[ (]").unwrap());
     static IF_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^if[ (]").unwrap());
@@ -331,11 +335,11 @@ pub fn parse_statement(remaining: &mut&str) -> anyhow::Result<KlisterStatement> 
     } else if IF_RE.is_match(remaining) {
         return parse_if(remaining);
     } else {
-        return parse_assignment_or_lower(remaining);
+        return parse_precedence_0(remaining);
     }
 }
 
-pub fn parse_statements(remaining: &mut&str) -> anyhow::Result<Vec<KlisterStatement>> {
+fn parse_statements(remaining: &mut&str) -> anyhow::Result<Vec<KlisterStatement>> {
     let mut ret = Vec::new();
     skip_space_and_newlines(remaining);
     while !remaining.is_empty() {
@@ -345,14 +349,20 @@ pub fn parse_statements(remaining: &mut&str) -> anyhow::Result<Vec<KlisterStatem
     return Ok(ret)
 }
 
-pub fn just_parse_statements(s: &str) -> anyhow::Result<Vec<KlisterStatement>> {
-    let mut remaining: &str = &s;
-    let result = parse_statements(&mut remaining);
-    if remaining.is_empty() {return result} else {return Err(anyhow!("Trailing garbage {}", remaining))}
-}
-
 pub fn parse_ast(s: &str) -> anyhow::Result<KlisterStatement> {
-    let statements = just_parse_statements(s)?;
+    // Add a trailing newline if the file doesn't end in one.
+    let mut appended = String::new();
+    let s = if s.chars().last() == Some('\n') {
+        s
+    } else {
+        appended = format!("{s}\n");
+        &appended
+    };
 
+    let mut remaining: &str = &s;
+    let statements = parse_statements(&mut remaining)?;
+    if !remaining.is_empty() {
+        return Err(anyhow!("Trailing garbage {}", remaining))
+    }
     return Ok(KlisterStatement::Block(statements));
 }
