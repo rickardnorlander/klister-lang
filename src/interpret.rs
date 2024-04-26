@@ -1,7 +1,8 @@
 use std::collections::HashMap;
-use std::ffi::c_int;
 use std::io::Write;
 use std::process::Command;
+
+use num_bigint::BigInt;
 
 use crate::ast::*;
 use crate::ccall::Libraries;
@@ -30,9 +31,9 @@ fn unpack_cs(kv: KlisterValue) -> Result<String, KlisterRTE> {
     }
 }
 
-fn unpack_int(kv: KlisterValue) -> Result<c_int, KlisterRTE> {
+fn unpack_int(kv: KlisterValue) -> Result<BigInt, KlisterRTE> {
     match kv {
-        KlisterValue::Int(lv) => Ok(lv),
+        KlisterValue::BInt(lv) => Ok(lv),
         _ => Err(KlisterRTE::from_str("Type error")),
     }
 }
@@ -116,8 +117,8 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
             let s = lv.as_str();
             let ind = rv.try_into().unwrap();
             let cu32 = s.chars().nth(ind).unwrap() as u32;
-            let ci32:i32 = cu32.try_into().unwrap();
-            Ok(KlisterValue::Int(ci32))
+            let bi:BigInt = cu32.try_into().unwrap();
+            Ok(KlisterValue::BInt(bi))
         }
         KlisterExpression::Dot(obj_expr, subscript) => {
             let obj = handle_expression(context, obj_expr)?;
@@ -146,22 +147,22 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
         KlisterExpression::Add(left, right) => {
             let lv = unpack_int(handle_expression(context, left)?)?;
             let rv = unpack_int(handle_expression(context, right)?)?;
-            Ok(KlisterValue::Int(lv+rv))
+            Ok(KlisterValue::BInt(lv+rv))
         }
         KlisterExpression::Sub(left, right) => {
             let lv = unpack_int(handle_expression(context, left)?)?;
             let rv = unpack_int(handle_expression(context, right)?)?;
-            Ok(KlisterValue::Int(lv-rv))
+            Ok(KlisterValue::BInt(lv-rv))
         }
         KlisterExpression::Mul(left, right) => {
             let lv = unpack_int(handle_expression(context, left)?)?;
             let rv = unpack_int(handle_expression(context, right)?)?;
-            Ok(KlisterValue::Int(lv*rv))
+            Ok(KlisterValue::BInt(lv*rv))
         }
         KlisterExpression::Div(left, right) => {
             let lv = unpack_int(handle_expression(context, left)?)?;
             let rv = unpack_int(handle_expression(context, right)?)?;
-            Ok(KlisterValue::Int(lv/rv))
+            Ok(KlisterValue::BInt(lv/rv))
         }
         KlisterExpression::Lt(left, right) => {
             let lv = unpack_int(handle_expression(context, left)?)?;

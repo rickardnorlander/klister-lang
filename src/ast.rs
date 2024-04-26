@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::ffi::c_int;
+use num_bigint::BigInt;
 
 use crate::except::KlisterRTE;
 
@@ -15,7 +15,7 @@ pub enum KlisterResult {
 #[derive(Clone)]
 pub enum KlisterValue {
     CS(String),
-    Int(c_int),
+    BInt(BigInt),
     Bool(bool),
     Bytes(Vec<u8>),
     Exception,

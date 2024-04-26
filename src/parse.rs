@@ -1,10 +1,13 @@
 #![allow(unused_assignments)]
 
-use crate::ast::*;
-use regex::Regex;
-use once_cell::sync::Lazy;
 use anyhow::anyhow;
 use anyhow::Context;
+use num_bigint::BigInt;
+use once_cell::sync::Lazy;
+use regex::Regex;
+
+
+use crate::ast::*;
 
 fn parse_import(remaining: &mut &str) -> anyhow::Result<KlisterStatement> {
     skip_space(remaining);
@@ -44,9 +47,9 @@ fn parse_precedence_6(s: &mut& str) -> anyhow::Result<KlisterExpression> {
     }
     static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[+-]?[0-9]+").unwrap());
     if let Some(caps) = RE.captures(s) {
-        let result = caps[0].parse::<i32>().ok().context("Invalid numeric literal")?;
+        let result = caps[0].parse::<BigInt>().ok().context("Invalid numeric literal")?;
         *s = &s[caps[0].len()..];
-        return Ok(KlisterExpression::Literal(KlisterValue::Int(result)));
+        return Ok(KlisterExpression::Literal(KlisterValue::BInt(result)));
     }
     static SHELL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^`").unwrap());
     if SHELL_RE.is_match(s) {

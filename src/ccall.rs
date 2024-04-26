@@ -12,6 +12,7 @@ use libffi::low;
 use libffi::middle::arg;
 use libffi::middle::Arg;
 use libffi::middle::Cif;
+use num_bigint::BigInt;
 
 
 use crate::ast::KlisterValue;
@@ -95,7 +96,6 @@ impl Libraries {
     }
 }
 
-
 pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<KlisterValue>) -> Result<KlisterValue, KlisterRTE> {
     let mut args = Vec::<Arg>::new();
     let mut arg_storage = Vec::<Vec<u8>>::new();
@@ -112,8 +112,13 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Kliste
                 ptr_storage.push(Box::new(arg_storage.last().unwrap().as_ptr() as *mut c_void));
                 args.push(arg(ptr_storage.last().unwrap().as_ref()));
             }
-            KlisterValue::Int(ref x) => {
-                args.push(arg(x));
+            KlisterValue::BInt(ref x) => {
+                let downcast_res = x.try_into();
+                let Ok(downcast_x) = downcast_res else {return Err(KlisterRTE::from_str("Number too big to pass"));};
+                let downcast: c_int = downcast_x;
+                arg_storage.push(downcast.to_ne_bytes().to_vec());
+                let myref: &u8 = arg_storage.last().unwrap().first().unwrap();
+                args.push(arg(myref));
             }
             KlisterValue::Bytes(x) => {
                 let xclone = x.clone();
@@ -153,8 +158,13 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Kliste
     }
 
     let ret = match rettypename.as_str() {
-        "int" => Ok(KlisterValue::Int(i32::from_ne_bytes(result.try_into().unwrap()))), // TODO: should check int is 32bits.
-            _ => Err(KlisterRTE::new())
+        "int" => {
+            let cint = c_int::from_ne_bytes(result.try_into().unwrap());
+
+            let bint:BigInt = cint.into();
+            Ok(KlisterValue::BInt(bint))
+        }
+        _ => todo!()
     };
 
     // There are pointers into these structures.
