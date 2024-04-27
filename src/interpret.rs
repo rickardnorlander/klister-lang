@@ -51,11 +51,32 @@ fn unpack_bool(kv: Gc<KlisterValue>) -> Result<bool, KlisterRTE> {
     }
 }
 
+fn handle_shell_args(context: &mut Context, argon: &Vec<Argon>) -> Result<Vec<String>, KlisterRTE> {
+    let mut ret = Vec::<String>::new();
+    for argona in argon {
+        let Argon::ArgonGlob(glob_parts) = argona else {todo!()};
+        let mut out_arg = String::new();
+        for part in glob_parts {
+            match part {
+                GlobPart::GlobPartS(ref s) => {
+                    out_arg.push_str(s);
+                }
+                GlobPart::GlobPartInterpolation(ref expr) => {
+                    let val = unpack_cs(handle_expression(context, expr)?)?;
+                    out_arg.push_str(&val);
+                }
+                _ => {todo!();}
+            }
+        }
+        ret.push(out_arg);
+    }
+    return Ok(ret);
+}
 
-fn handle_shell_pipeline(sp: &ShellPipelineS) -> ShellResE {
+fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<ShellResE, KlisterRTE> {
     let cmds = &sp.commands;
     if cmds.len() == 0 {
-        return ShellResE::SResErr(KlisterRTE::from_str("Empty pipeline"), Vec::new(), None);
+        return Err(KlisterRTE::from_str("Empty pipeline"));
     };
 
     let mut output_opt: Option<Vec<u8>> = None;
@@ -65,7 +86,8 @@ fn handle_shell_pipeline(sp: &ShellPipelineS) -> ShellResE {
             true => std::process::Stdio::piped(),
             false => std::process::Stdio::inherit(),
         };
-        let child_res = Command::new(cmd.command.clone()).args(cmd.args.clone()).stdin(stdinxxx).stderr(std::process::Stdio::inherit()).stdout(std::process::Stdio::piped()).spawn();
+        let args = handle_shell_args(context, &cmd.args)?;
+        let child_res = Command::new(cmd.command.clone()).args(args).stdin(stdinxxx).stderr(std::process::Stdio::inherit()).stdout(std::process::Stdio::piped()).spawn();
         let mut child = child_res.unwrap();
         let mut write_ok = true;
 
@@ -94,16 +116,16 @@ fn handle_shell_pipeline(sp: &ShellPipelineS) -> ShellResE {
         });
 
         if !write_ok {
-            return ShellResE::SResErr(KlisterRTE::from_str("Failed to write to stdin"), Vec::new(), None);
+            return Ok(ShellResE::SResErr(KlisterRTE::from_str("Failed to write to stdin"), Vec::new(), None));
         }
 
         let ShellResE::SResOk(v) = scope_result else {
-            return scope_result;
+            return Ok(scope_result);
         };
         output_opt = Some(v)
     }
     let output = output_opt.unwrap();
-    ShellResE::SResOk(output)
+    Ok(ShellResE::SResOk(output))
 }
 
 fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> Result<Gc<KlisterValue>, KlisterRTE> {
@@ -275,7 +297,7 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
             }
         }
         KlisterExpression::ShellPipeline(sp) => {
-            let result = handle_shell_pipeline(sp);
+            let result = handle_shell_pipeline(context, sp)?;
             if sp.is_catch {
                 return Ok(Gc::new(KlisterValue::ShellRes(result)));
             }

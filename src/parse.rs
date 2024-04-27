@@ -352,30 +352,95 @@ fn parse_if(s: &mut&str) -> anyhow::Result<KlisterStatement> {
     return Ok(KlisterStatement::If(expr, Box::new(body), Some(Box::new(elsebody))));
 }
 
-fn parse_shell_token(s: &mut&str) -> anyhow::Result<Option<String>> {
+fn get_shell_escape(c: char) -> anyhow::Result<char> {
+    Ok(match c {
+        // Should this be enabled?
+        // 'n' => '\n',
+        '\\' => '\\',
+        '"' => '"',
+        '`' => '`',
+        '|' => '|',
+        '$' => '$',
+        '*' => '*',
+        _ => {return Err(anyhow!("Unknown escape sequence"));}
+    })
+}
+
+fn parse_interpolation(s: &mut&str) -> anyhow::Result<GlobPart> {
+    // Todo: implement simple non-braced interpolation
+    consume("{", s)?;
+    let ret = parse_precedence_1(s)?;
+    consume("}", s)?;
+    return Ok(GlobPart::GlobPartInterpolation(Box::new(ret)));
+}
+
+fn parse_shell_quote(s: &mut&str) -> anyhow::Result<String> {
+    consume("\"", s)?;
     let mut ret = String::new();
-    let mut charss = s.chars();
     loop {
-        let Some(c) = charss.next() else {break;};
+        let c = s.chars().next().context("Unterminated quote")?;
+        *s = &s[c.len_utf8()..];
+        if c == '"' {
+            return Ok(ret);
+        } else if c == '\n' {
+            return Err(anyhow!("Incomplete quote"));
+        } else if c == '\\' {
+            let c = s.chars().next().context("Unterminated escape")?;
+            *s = &s[c.len_utf8()..];
+            ret.push(get_shell_escape(c)?);
+        } else {
+            ret.push(c);
+        }
+    }
+}
+
+fn parse_glob_part(s: &mut&str) -> anyhow::Result<Option<GlobPart>> {
+    let mut ret = String::new();
+    while let Some(c) = s.chars().next() {
         if c == ' ' || c == '`' || c == '\n' || c == '|' || c == '`' {
             break;
-        } else if c == '\\' {
-            let c2 = charss.next().context("Incomplete escape")?;
-            if c2 == '\\' {
-                ret.push('\\');
-            } else if c2 == 'n' {
-                ret.push('\n');
-            } else {
-                return Err(anyhow!("Unknown escape sequence"));
+        } else if c == '*' {
+            if ret.is_empty() {
+                *s = &s[c.len_utf8()..];
+                return Ok(Some(GlobPart::GlobPartAsterisk));
             }
-            
-            *s = &s[c.len_utf8() + c2.len_utf8()..];
+            return Ok(Some(GlobPart::GlobPartS(ret)));
+        } else if c == '$' {
+            if ret.is_empty() {
+                *s = &s[c.len_utf8()..];
+                return parse_interpolation(s).map(|x| Some(x));
+            }
+            return Ok(Some(GlobPart::GlobPartS(ret)));
+        } else if c == '"' {
+            ret.extend(parse_shell_quote(s));
+        } else if c == '\\' {
+            *s = &s[c.len_utf8()..];
+
+            let c = s.chars().next().context("Incomplete escape")?;
+            *s = &s[c.len_utf8()..];
+            ret.push(get_shell_escape(c)?);
         } else {
             ret.push(c);
             *s = &s[c.len_utf8()..];
         }
     }
-    if !ret.is_empty() {return Ok(Some(ret));} else {return Ok(None)}
+    if !ret.is_empty() {return Ok(Some(GlobPart::GlobPartS(ret)));} else {return Ok(None)}
+}
+
+fn parse_argon(s: &mut&str) -> anyhow::Result<Option<Argon>> {
+    let mut ret = Vec::<GlobPart>::new();
+    loop {
+        let xx = parse_glob_part(s)?;
+        if let Some(yy) = xx {
+            ret.push(yy);
+        } else {
+            break;
+        }
+    }
+    if ret.is_empty() {
+        return Ok(None);
+    }
+    return Ok(Some(Argon::ArgonGlob(ret)));
 }
 
 fn skip_shell_separators(s: &mut&str) {
@@ -391,7 +456,7 @@ fn parse_shell_command(s: &mut&str) -> anyhow::Result<ShellCommand> {
     let mut shell_tokens = Vec::new();
     loop {
         skip_shell_separators(s);
-        let token_opt_res = parse_shell_token(s);
+        let token_opt_res = parse_argon(s);
         let token_opt = token_opt_res?;
         let Some(token) = token_opt else {
             break;
@@ -401,7 +466,7 @@ fn parse_shell_command(s: &mut&str) -> anyhow::Result<ShellCommand> {
     let mut it = shell_tokens.into_iter();
     let cmd = it.next().context("Shell expression must have command")?;
     let args = it.collect();
-    return Ok(ShellCommand{command:cmd, args});
+    return Ok(ShellCommand{command: cmd.to_string(), args});
 }
 
 fn parse_shell_main(s: &mut&str) -> anyhow::Result<KlisterExpression> {

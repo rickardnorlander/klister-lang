@@ -36,10 +36,39 @@ pub enum ShellResE {
     SResErr(KlisterRTE, Vec<u8>, Option<i32>),
 }
 
-
+#[derive(Clone)]
 #[derive(Debug)]
-pub struct ShellCommand{pub command: String, pub args: Vec<String>}
+pub enum GlobPart {
+    GlobPartS(String),
+    GlobPartAsterisk,
+    GlobPartInterpolation(Box<KlisterExpression>),
+}
 
+#[derive(Clone)]
+#[derive(Debug)]
+pub enum Argon {
+    ArgonGlob(Vec<GlobPart>),
+    ArgonArrayRef(String),
+}
+
+impl Argon {
+    pub fn to_string(self: &Argon) -> String {
+        if let Argon::ArgonGlob(ref v) = self {
+            if v.len() == 1 {
+                if let GlobPart::GlobPartS(s) = v.first().unwrap() {
+                    return s.to_string();
+                }
+            }
+        }
+        todo!();
+    }
+}
+
+#[derive(Clone)]
+#[derive(Debug)]
+pub struct ShellCommand{pub command: String, pub args: Vec<Argon>}
+
+#[derive(Clone)]
 #[derive(Debug)]
 pub struct ShellPipelineS {
     pub commands: Vec<ShellCommand>,
@@ -56,6 +85,7 @@ impl ShellPipelineS {
     }
 }
 
+#[derive(Clone)]
 #[derive(Debug)]
 pub enum KlisterExpression {
     Call(Box<KlisterExpression>, Vec<KlisterExpression>),

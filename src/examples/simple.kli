@@ -12,11 +12,11 @@ myputs("Bye")  # Comment
 if(?(`false`).is_ok){
     puts("Never")
 }
-asdf="yess"
+asdf="yes"
 putchar(asdf[1])
 puts(asdf)
 
-might_fail = ?(`echo We good`)
+might_fail = ?(`echo We " are " ${(1+1).to_string()}good`)
 if (might_fail.is_ok) {
     was_fine = might_fail.ok_variant
     write(1, was_fine, was_fine.len)
