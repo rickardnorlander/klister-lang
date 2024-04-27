@@ -367,11 +367,15 @@ fn get_shell_escape(c: char) -> anyhow::Result<char> {
 }
 
 fn parse_interpolation(s: &mut&str) -> anyhow::Result<GlobPart> {
-    // Todo: implement simple non-braced interpolation
-    consume("{", s)?;
-    let ret = parse_precedence_1(s)?;
-    consume("}", s)?;
-    return Ok(GlobPart::GlobPartInterpolation(Box::new(ret)));
+    if consume("{", s).is_ok() {
+        let ret = parse_precedence_1(s)?;
+        consume("}", s)?;
+        return Ok(GlobPart::GlobPartInterpolation(Box::new(ret)));
+    }
+    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[A-Za-z_]+").unwrap());
+    let caps = RE.captures(s).context("Invalid interpolation")?;
+    *s = &s[caps[0].len()..];
+    return Ok(GlobPart::GlobPartInterpolation(Box::new(KlisterExpression::Variable(caps[0].to_string()))));
 }
 
 fn parse_shell_quote(s: &mut&str) -> anyhow::Result<String> {
@@ -380,6 +384,7 @@ fn parse_shell_quote(s: &mut&str) -> anyhow::Result<String> {
     loop {
         let c = s.chars().next().context("Unterminated quote")?;
         *s = &s[c.len_utf8()..];
+        // Maybe enable interpolation in quotes?
         if c == '"' {
             return Ok(ret);
         } else if c == '\n' {

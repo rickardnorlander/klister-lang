@@ -16,7 +16,7 @@ asdf="yes"
 putchar(asdf[1])
 puts(asdf)
 
-might_fail = ?(`echo We " are " ${(1+1).to_string()}good`)
+might_fail = ?(`echo We " are " ${(1+1).to_string()}good $asdf`)
 if (might_fail.is_ok) {
     was_fine = might_fail.ok_variant
     write(1, was_fine, was_fine.len)
