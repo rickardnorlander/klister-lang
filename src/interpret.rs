@@ -134,6 +134,8 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
             let v = handle_expression(context, fn_expr)?;
             if let KlisterValue::CFunction(ref fn_name) = *v {
                 handle_ffi_call(context, fn_name, arguments).map(|x| Gc::new(x))
+            } else if let KlisterValue::KlisterFunction(ref body) = *v {
+                return handle_statement(context, body).map(|_| Gc::new(KlisterValue::Nothing));
             } else if let KlisterValue::MemberFunction(ref obj, ref r_name) = *v {
                 match **obj {
                     KlisterValue::BInt(ref b) => {
@@ -315,6 +317,10 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
 
 fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> Result<(), KlisterRTE> {
     match statement {
+        KlisterStatement::Function(name, block) => {
+            context.variables.insert(name.to_string(), Gc::new(KlisterValue::KlisterFunction(block.clone())));
+            Ok(())
+        }
         KlisterStatement::Import(libname, fname, rettypename, argnames) => {
             handle_import(context, libname, fname, rettypename, argnames)?;
             Ok(())

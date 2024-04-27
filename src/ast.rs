@@ -27,6 +27,7 @@ pub enum KlisterValue {
     Nothing,
     CFunction(String),
     MemberFunction(gc::Gc<KlisterValue>, String),
+    KlisterFunction(#[unsafe_ignore_trace] Box<KlisterStatement>),
 }
 
 #[derive(Clone)]
@@ -110,7 +111,10 @@ pub enum KlisterExpression {
     ShellPipeline(ShellPipelineS),
 }
 
+#[derive(Clone)]
+#[derive(Debug)]
 pub enum KlisterStatement {
+    Function(String, Box<KlisterStatement>),
     Import(String, String, String, Vec<String>),
     Assign(String, KlisterExpression),
     Expression(KlisterExpression),

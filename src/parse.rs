@@ -352,6 +352,21 @@ fn parse_if(s: &mut&str) -> anyhow::Result<KlisterStatement> {
     return Ok(KlisterStatement::If(expr, Box::new(body), Some(Box::new(elsebody))));
 }
 
+fn parse_function(s: &mut&str) -> anyhow::Result<KlisterStatement> {
+    skip_space_and_newlines(s)?;
+    consume("function", s)?;
+    skip_space_and_newlines(s)?;
+    let name = parse_id(s)?;
+    skip_space_and_newlines(s)?;
+    consume("(", s)?;
+    // Parameters not supported for now
+    skip_space_and_newlines(s)?;
+    consume(")", s)?;
+    let body = parse_block(s)?;
+
+    return Ok(KlisterStatement::Function(name, Box::new(body)));
+}
+
 fn get_shell_escape(c: char) -> anyhow::Result<char> {
     Ok(match c {
         // Should this be enabled?
@@ -499,12 +514,15 @@ fn parse_statement(remaining: &mut&str) -> anyhow::Result<KlisterStatement> {
     static IMPORT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^import ").unwrap());
     static WHILE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^while[ (]").unwrap());
     static IF_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^if[ (]").unwrap());
+    static FUNCTION_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^function ").unwrap());
     if IMPORT_RE.is_match(remaining) {
         return parse_import(remaining);
     } else if WHILE_RE.is_match(remaining) {
         return parse_while(remaining);
     } else if IF_RE.is_match(remaining) {
         return parse_if(remaining);
+    } else if FUNCTION_RE.is_match(remaining) {
+        return parse_function(remaining);
     } else {
         return parse_precedence_0(remaining);
     }

@@ -26,7 +26,7 @@ Quite incomplete
 
 * Command line arguments. Scripts cannot yet take command line arguments.
 * Types. Some progress on the type system. Might be completely overhauled but the result will still likely be fairly basic.
-* AST & Parsing. Decent progress. A few things left to model.
+* Functions. No support for arguments / return values / local variables yet.
 * C-imports. Very experimental. Might be extended or removed.
 * Running programs, pipelines etc. Works but is pretty basic.
 * Interpreter error handling: Very bad state. The interpreter might panic or print an error or throw an exception for the script to handle more or less randomly.

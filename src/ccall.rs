@@ -133,6 +133,9 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Kliste
             KlisterValue::CFunction(_) => {
                 todo!();
             }
+            KlisterValue::KlisterFunction(_) => {
+                return Err(KlisterRTE::from_str("Can't pass functions to c-api"));
+            }
             KlisterValue::Exception(_) => {
                 return Err(KlisterRTE::from_str("Can't pass exception to c-api"));
             }
