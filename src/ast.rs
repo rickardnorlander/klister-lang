@@ -52,22 +52,9 @@ pub enum Argon {
     ArgonArrayRef(String),
 }
 
-impl Argon {
-    pub fn to_string(self: &Argon) -> String {
-        if let Argon::ArgonGlob(ref v) = self {
-            if v.len() == 1 {
-                if let GlobPart::GlobPartS(s) = v.first().unwrap() {
-                    return s.to_string();
-                }
-            }
-        }
-        todo!();
-    }
-}
-
 #[derive(Clone)]
 #[derive(Debug)]
-pub struct ShellCommand{pub command: String, pub args: Vec<Argon>}
+pub struct ShellCommand{pub command: Argon, pub args: Vec<Argon>}
 
 #[derive(Clone)]
 #[derive(Debug)]

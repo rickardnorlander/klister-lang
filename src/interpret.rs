@@ -20,7 +20,7 @@ pub struct Context {
 }
 
 fn handle_import(context: &mut Context, libname: &str, fname: &str, rettypename: &str, argnames: &Vec<String>) -> Result<(), KlisterRTE> {
-    context.libs.load_fn(libname, fname, rettypename, &argnames.iter().map(String::as_str).collect::<Vec<_>>());
+    context.libs.load_fn(libname, fname, rettypename, &argnames.iter().map(String::as_str).collect::<Vec<_>>())?;
     context.variables.insert(fname.to_string(), Gc::new(KlisterValue::CFunction(fname.to_string())));
     Ok(())
 }
@@ -33,42 +33,50 @@ fn handle_ffi_call(context: &mut Context, fn_name: &str, arguments: &Vec<Klister
 fn unpack_cs(kv: Gc<KlisterValue>) -> Result<String, KlisterRTE> {
     match *kv {
         KlisterValue::CS(ref lv) => Ok(lv.clone()),
-        _ => Err(KlisterRTE::from_str("Type error")),
+        _ => Err(KlisterRTE::new("Type error", false)),
     }
 }
 
 fn unpack_int(kv: Gc<KlisterValue>) -> Result<BigInt, KlisterRTE> {
     match *kv {
         KlisterValue::BInt(ref lv) => Ok(lv.clone()),
-        _ => Err(KlisterRTE::from_str("Type error")),
+        _ => Err(KlisterRTE::new("Type error", false)),
     }
 }
 
 fn unpack_bool(kv: Gc<KlisterValue>) -> Result<bool, KlisterRTE> {
     match *kv {
         KlisterValue::Bool(ref lv) => Ok(lv.clone()),
-        _ => Err(KlisterRTE::from_str("Type error")),
+        _ => Err(KlisterRTE::new("Type error", false)),
     }
+}
+
+fn handle_shell_arg(context: &mut Context, argona: &Argon) -> Result<String, KlisterRTE> {
+    let Argon::ArgonGlob(glob_parts) = argona else {
+        return Err(KlisterRTE::new("Array refs are not supported yet", false));
+    };
+    let mut out_arg = String::new();
+    for part in glob_parts {
+        match part {
+            GlobPart::GlobPartS(ref s) => {
+                out_arg.push_str(s);
+            }
+            GlobPart::GlobPartInterpolation(ref expr) => {
+                let val = unpack_cs(handle_expression(context, expr)?)?;
+                out_arg.push_str(&val);
+            }
+            GlobPart::GlobPartAsterisk => {
+                return Err(KlisterRTE::new("Asterisks are not supported yet", false));
+            }
+        }
+    }
+    return Ok(out_arg);
 }
 
 fn handle_shell_args(context: &mut Context, argon: &Vec<Argon>) -> Result<Vec<String>, KlisterRTE> {
     let mut ret = Vec::<String>::new();
     for argona in argon {
-        let Argon::ArgonGlob(glob_parts) = argona else {todo!()};
-        let mut out_arg = String::new();
-        for part in glob_parts {
-            match part {
-                GlobPart::GlobPartS(ref s) => {
-                    out_arg.push_str(s);
-                }
-                GlobPart::GlobPartInterpolation(ref expr) => {
-                    let val = unpack_cs(handle_expression(context, expr)?)?;
-                    out_arg.push_str(&val);
-                }
-                _ => {todo!();}
-            }
-        }
-        ret.push(out_arg);
+        ret.push(handle_shell_arg(context, argona)?);
     }
     return Ok(ret);
 }
@@ -76,7 +84,7 @@ fn handle_shell_args(context: &mut Context, argon: &Vec<Argon>) -> Result<Vec<St
 fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<ShellResE, KlisterRTE> {
     let cmds = &sp.commands;
     if cmds.len() == 0 {
-        return Err(KlisterRTE::from_str("Empty pipeline"));
+        return Err(KlisterRTE::new("Empty pipeline", false));
     };
 
     let mut output_opt: Option<Vec<u8>> = None;
@@ -87,14 +95,17 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<S
             false => std::process::Stdio::inherit(),
         };
         let args = handle_shell_args(context, &cmd.args)?;
-        let child_res = Command::new(cmd.command.clone()).args(args).stdin(stdinxxx).stderr(std::process::Stdio::inherit()).stdout(std::process::Stdio::piped()).spawn();
-        let mut child = child_res.unwrap();
+        let command = handle_shell_arg(context, &cmd.command)?;
+        let child_res = Command::new(command).args(args).stdin(stdinxxx).stderr(std::process::Stdio::inherit()).stdout(std::process::Stdio::piped()).spawn();
+        let Ok(mut child) = child_res else {
+            return Ok(ShellResE::SResErr(KlisterRTE::new("Failed to spawn child", true), Vec::new(), None));
+        };
         let mut write_ok = true;
 
         let scope_result = std::thread::scope(|my_thread_scope| {
             if let Some(output) = output_opt {
                 let Some(mut stdin) = child.stdin.take() else {
-                    return ShellResE::SResErr(KlisterRTE::from_str("Failed to open stdin"), Vec::new(), None);
+                    return ShellResE::SResErr(KlisterRTE::new("Failed to open stdin", true), Vec::new(), None);
                 };
                 {
                     let write_ok = &mut write_ok;
@@ -107,16 +118,16 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<S
             }
     
             let Ok(output) = child.wait_with_output() else {
-                return ShellResE::SResErr(KlisterRTE::from_str("Failed to read stdout"), Vec::new(), None);
+                return ShellResE::SResErr(KlisterRTE::new("Failed to read stdout", true), Vec::new(), None);
             };
             if !output.status.success() {
-                return ShellResE::SResErr(KlisterRTE::from_str("Shell command failed"), output.stdout, output.status.code());
+                return ShellResE::SResErr(KlisterRTE::new("Shell command failed", true), output.stdout, output.status.code());
             }
             return ShellResE::SResOk(output.stdout);
         });
 
         if !write_ok {
-            return Ok(ShellResE::SResErr(KlisterRTE::from_str("Failed to write to stdin"), Vec::new(), None));
+            return Ok(ShellResE::SResErr(KlisterRTE::new("Failed to write to stdin", true), Vec::new(), None));
         }
 
         let ShellResE::SResOk(v) = scope_result else {
@@ -124,7 +135,7 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<S
         };
         output_opt = Some(v)
     }
-    let output = output_opt.unwrap();
+    let output = output_opt.expect("Internal interpreter error: Output was none");
     Ok(ShellResE::SResOk(output))
 }
 
@@ -142,28 +153,36 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
                         match r_name.as_str() {
                             "to_string" => {
                                 if arguments.len() != 0 {
-                                    return Err(KlisterRTE::from_str("Wrong number of arguments"));
+                                    return Err(KlisterRTE::new("Wrong number of arguments", false));
                                 }
                                 return Ok(Gc::new(KlisterValue::CS(b.to_string())));
                             }
-                            _ => todo!()
+                            _ => {
+                                return Err(KlisterRTE::new("Invalid member function", false));
+                            }
                         }
                     }
                     _ => {
-                        todo!();
+                        return Err(KlisterRTE::new("Invalid member function", false));
                     }
                 }
             } else {
-                return Err(KlisterRTE::from_str("Object is not callable"));
+                return Err(KlisterRTE::new("Object is not callable", false));
             }
         }
         KlisterExpression::Index(arr, index) => {
             let lv = unpack_cs(handle_expression(context, arr)?)?;
             let rv = unpack_int(handle_expression(context, index)?)?;
             let s = lv.as_str();
-            let ind = rv.try_into().unwrap();
-            let cu32 = s.chars().nth(ind).unwrap() as u32;
-            let bi:BigInt = cu32.try_into().unwrap();
+            let Ok(ind) = rv.try_into() else {
+                return Err(KlisterRTE::new("Index is not valid usize", false));
+            };
+            let Some(nthchar) = s.chars().nth(ind) else {
+                return Err(KlisterRTE::new("Index out of bounds", false));
+            };
+
+            let cu32 = nthchar as u32;
+            let bi:BigInt = cu32.into();
             Ok(Gc::new(KlisterValue::BInt(bi)))
         }
         KlisterExpression::Dot(obj_expr, subscript) => {
@@ -176,17 +195,18 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
                         }
                         "ok_variant" => {
                             let KlisterResult::ResOk(ok) = r else {
-                                return Err(KlisterRTE::from_str("Accessed inactive variant"));
+                                // todo: reconsider whether this should be catchable
+                                return Err(KlisterRTE::new("Accessed inactive variant", true));
                             };
                             return Ok(ok.clone());
                         }
                         "err_variant" => {
                             let KlisterResult::ResErr(err) = r else {
-                                return Err(KlisterRTE::from_str("Accessed inactive variant"));
+                                return Err(KlisterRTE::new("Accessed inactive variant", false));
                             };
                             return Ok(Gc::new(KlisterValue::Exception((*err).clone())));
                         }
-                        _ => todo!()
+                        _ => {return Err(KlisterRTE::new("Member doesn't exist", false));}
                     }
                 }
                 KlisterValue::BInt(_) => {
@@ -194,7 +214,7 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
                         "to_string" => {
                             return Ok(Gc::new(KlisterValue::MemberFunction(obj, subscript.clone())));
                         }
-                        _ => todo!()
+                        _ => {return Err(KlisterRTE::new("Member doesn't exist", false));}
                     }
                 }
                 KlisterValue::ShellRes(ref r) => {
@@ -202,7 +222,7 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
                         "is_ok" => {
                             return Ok(Gc::new(KlisterValue::Bool(matches!(r, ShellResE::SResOk(_)))))
                         }
-                        _ => todo!()
+                        _ => {return Err(KlisterRTE::new("Member doesn't exist", false));}
                     }
                 }
                 KlisterValue::Bytes(ref bytes) => {
@@ -210,17 +230,17 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
                         "len" => {
                             return Ok(Gc::new(KlisterValue::BInt(bytes.len().into())))
                         }
-                        _ => todo!()
+                        _ => {return Err(KlisterRTE::new("Member doesn't exist", false));}
                     }
                 }
-                _ => todo!()
+                _ => {return Err(KlisterRTE::new("Member doesn't exist", false));}
             };
         }
         KlisterExpression::Literal(v) => {Ok(Gc::new(v.clone()))}
         KlisterExpression::Variable(v) => {
             match context.variables.get(v) {
                 Some(val) => Ok(val.clone()),
-                None => panic!("Variable not defined: {}", v),
+                None => {return Err(KlisterRTE::new(&format!("Variable not defined {}", v), false));}
             }
         }
         KlisterExpression::Add(left, right) => {
@@ -288,13 +308,17 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
             Ok(Gc::new(KlisterValue::Bool(!v)))
         }
         KlisterExpression::CatchExpr(expr) => {
-            let v_opt = handle_expression(context, expr);
-            match v_opt {
-                Ok(ref v) => {
-                    Ok(Gc::new(KlisterValue::Res(KlisterResult::ResOk(v.clone()))))
+            let v_res = handle_expression(context, expr);
+            match v_res {
+                Ok(v) => {
+                    Ok(Gc::new(KlisterValue::Res(KlisterResult::ResOk(v))))
                 }
                 Err(e) => {
-                    Ok(Gc::new(KlisterValue::Res(KlisterResult::ResErr(Box::new(e)))))
+                    if e.catchable {
+                        Ok(Gc::new(KlisterValue::Res(KlisterResult::ResErr(Box::new(e)))))
+                    } else {
+                        Err(e)
+                    }
                 }
             }
         }
@@ -363,8 +387,8 @@ fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> Resu
     }
 }
 
-pub fn interpret_ast(ast: KlisterStatement) {
+pub fn interpret_ast(ast: KlisterStatement) -> Option<KlisterRTE> {
     let mut context: Context = Context{libs: Libraries::new(), variables: HashMap::new()};
 
-    handle_statement(&mut context, &ast).unwrap();
+    return handle_statement(&mut context, &ast).err();
 }

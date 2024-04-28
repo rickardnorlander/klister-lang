@@ -536,7 +536,7 @@ fn parse_shell_command(s: &mut&str) -> ParseResult<ShellCommand> {
     let mut it = shell_tokens.into_iter();
     let cmd = it.next().context(s, "Shell expression must have command")?;
     let args = it.collect();
-    return Ok(ShellCommand{command: cmd.to_string(), args});
+    return Ok(ShellCommand{command: cmd, args});
 }
 
 fn parse_shell_main(s: &mut&str) -> ParseResult<KlisterExpression> {

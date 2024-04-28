@@ -4,14 +4,12 @@
 #[derive(Debug)]
 #[derive(gc::Trace, gc::Finalize)]
 pub struct KlisterRTE {
-    pub s: String
+    pub s: String,
+    pub catchable: bool,
 }
 
 impl KlisterRTE {
-    pub fn new() -> KlisterRTE {
-        KlisterRTE{s: "".to_string()}
-    }
-    pub fn from_str(s: &str) -> KlisterRTE {
-        KlisterRTE{s: s.to_string()}
+    pub fn new(s: &str, catchable: bool) -> KlisterRTE {
+        KlisterRTE{s: s.to_string(), catchable}
     }
 }

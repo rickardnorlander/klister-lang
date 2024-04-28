@@ -23,7 +23,10 @@ fn main() -> ExitCode {
         parser.parse_args_or_exit();
     }
 
-    let contents = fs::read_to_string(&command).expect("Couldn't read script");
+    let Ok(contents) = fs::read_to_string(&command) else {
+        eprintln!("File not found");
+        return ExitCode::FAILURE;
+    };
 
     let ast_res = parse_ast(&contents);
     let Ok(ast) = ast_res else {
@@ -33,7 +36,12 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    interpret_ast(ast);
+    let err_opt = interpret_ast(ast);
+
+    if let Some(err) = err_opt {
+        eprintln!("Script failed {}", err.s);
+        return ExitCode::FAILURE;
+    }
 
     return ExitCode::SUCCESS;
 }
