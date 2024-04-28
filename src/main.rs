@@ -6,6 +6,7 @@ mod parse;
 mod types;
 
 use std::fs;
+use std::process::ExitCode;
 
 use argparse::ArgumentParser;
 use argparse::Store;
@@ -13,7 +14,7 @@ use argparse::Store;
 use crate::parse::parse_ast;
 use crate::interpret::interpret_ast;
 
-fn main() {
+fn main() -> ExitCode {
     let mut command = String::new();
 
     {
@@ -27,10 +28,12 @@ fn main() {
     let ast_res = parse_ast(&contents);
     let Ok(ast) = ast_res else {
         if let Err(error) = ast_res {
-            println!("Ast parse error {:?}", error);
+            println!("Ast parse error {}", error.prettyprint(&contents));
         }
-        panic!();
+        return ExitCode::FAILURE;
     };
 
     interpret_ast(ast);
+
+    return ExitCode::SUCCESS;
 }

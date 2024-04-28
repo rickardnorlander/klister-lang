@@ -4,7 +4,6 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0"
 argparse = "0.2.2"
 gc = { version = "0.5", features = ["derive"] }
 libffi = "3.2.0"

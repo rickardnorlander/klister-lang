@@ -29,4 +29,4 @@ Quite incomplete
 * Functions. No support for arguments / return values / local variables yet.
 * C-imports. Very experimental. Might be extended or removed.
 * Running programs, pipelines etc. Works but is pretty basic.
-* Interpreter error handling: Very bad state. The interpreter might panic or print an error or throw an exception for the script to handle more or less randomly.
+* Interpreter error handling: Bad state. The interpreter attempts to give a useful error message on syntax error (but the line/col is a little off). Runtime errors are handled inconsistently, some lead to an interpreter panic, others throw an exception the script could try to handle.
