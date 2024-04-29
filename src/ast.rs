@@ -1,41 +1,6 @@
 #![allow(dead_code)]
 
-use gc::Gc;
-use num_bigint::BigInt;
-
-use crate::except::KlisterRTE;
-
-#[derive(Debug)]
-#[derive(Clone)]
-#[derive(gc::Trace, gc::Finalize)]
-pub enum KlisterResult {
-    ResOk(Gc<KlisterValue>),
-    ResErr(Box<KlisterRTE>),
-}
-
-#[derive(Debug)]
-#[derive(Clone)]
-#[derive(gc::Trace, gc::Finalize)]
-pub enum KlisterValue {
-    CS(String),
-    BInt(#[unsafe_ignore_trace] BigInt),
-    Bool(bool),
-    Bytes(Vec<u8>),
-    Exception(Box<KlisterRTE>),
-    Res(KlisterResult),
-    ShellRes(#[unsafe_ignore_trace] ShellResE),
-    Nothing,
-    CFunction(String),
-    MemberFunction(gc::Gc<KlisterValue>, String),
-    KlisterFunction(#[unsafe_ignore_trace] Box<KlisterStatement>),
-}
-
-#[derive(Clone)]
-#[derive(Debug)]
-pub enum ShellResE {
-    SResOk(Vec<u8>),
-    SResErr(KlisterRTE, Vec<u8>, Option<i32>),
-}
+use crate::value::KlisterValueV2;
 
 #[derive(Clone)]
 #[derive(Debug)]
@@ -94,7 +59,9 @@ pub enum KlisterExpression {
     Not(Box<KlisterExpression>),
     CatchExpr(Box<KlisterExpression>),
     Variable(String),
-    Literal(KlisterValue),
+    // Use box instead of gc as a safeguard, to unsure the ast doesnt get accidentally mutated
+    // It's probably actually be fine to use gc though, think about it more at some point.
+    Literal(Box<dyn KlisterValueV2>),
     ShellPipeline(ShellPipelineS),
 }
 

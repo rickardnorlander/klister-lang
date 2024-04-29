@@ -7,6 +7,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 
 use crate::ast::*;
+use crate::value::KlisterInteger;
 
 #[derive(Debug)]
 pub struct SyntaxError {
@@ -75,6 +76,7 @@ fn parse_catch_expr(s: &mut&str) -> ParseResult<KlisterExpression> {
     consume(")", s)?;
     return Ok(res);
 }
+use crate::value::KlisterStr;
 
 fn parse_precedence_6(s: &mut& str) -> ParseResult<KlisterExpression> {
     skip_space(s);
@@ -89,7 +91,7 @@ fn parse_precedence_6(s: &mut& str) -> ParseResult<KlisterExpression> {
             let (pos, c) = in_chars.next().context(s, "Unterminated string literal")?;
             if c == '"' {
                 *s = &s[pos+c.len_utf8()..];
-                return Ok(KlisterExpression::Literal(KlisterValue::CS(out_str)));
+                return Ok(KlisterExpression::Literal(Box::new(KlisterStr{val: out_str})));
             }
             if c == '\\' {
                 out_str.push(in_chars.next().context(s,"Incomplete escape sequence")?.1);
@@ -101,7 +103,7 @@ fn parse_precedence_6(s: &mut& str) -> ParseResult<KlisterExpression> {
     if let Some(caps) = RE.captures(s) {
         let result = caps[0].parse::<BigInt>().ok().context(s, "Invalid numeric literal")?;
         *s = &s[caps[0].len()..];
-        return Ok(KlisterExpression::Literal(KlisterValue::BInt(result)));
+        return Ok(KlisterExpression::Literal(KlisterInteger::wrapn(result)));
     }
     static SHELL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^`").unwrap());
     if SHELL_RE.is_match(s) {

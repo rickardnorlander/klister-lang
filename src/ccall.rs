@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::ffi::c_char;
@@ -15,17 +13,17 @@ use libffi::middle::Cif;
 use libffi::middle::Type;
 use num_bigint::BigInt;
 
-
-use crate::ast::KlisterValue;
 use crate::except::KlisterRTE;
 use crate::types::TypeTag;
+use crate::value::KlisterInteger;
+use crate::value::KlisterValueV2;
+use crate::value::ValWrap;
 
 type LmidT = c_long;
 
 pub const LM_ID_NEWLM:i64 = -1;
 
 const RTLD_NOW:i32 = 0x00002;
-const RTLD_GLOBAL:i32 = 0x00100;
 const RTLD_NODELETE:i32 = 0x01000;
 const RTLD_DI_LMID:c_int = 1;
 
@@ -110,60 +108,36 @@ impl Libraries {
     }
 }
 
-pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<KlisterValue>) -> Result<KlisterValue, KlisterRTE> {
+pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dyn KlisterValueV2>>) -> Result<ValWrap, KlisterRTE> {
     let mut args = Vec::<Arg>::new();
     let mut arg_storage = Vec::<Vec<u8>>::new();
     let mut ptr_storage = Vec::<Box<*mut c_void>>::new();
 
-    for v in &argument_values {
-        match v {
-            KlisterValue::CS(x) => {
-                let mut st = Vec::with_capacity(x.len() + 1);
-                st.extend(x.as_bytes());
-                st.push(0);
-                if CStr::from_bytes_with_nul(&st).is_err() {
-                    return Err(KlisterRTE::new("Validation as c-string failed", true))
-                }
-                arg_storage.push(st);
-                ptr_storage.push(Box::new(arg_storage.last().unwrap().as_ptr() as *mut c_void));
-                args.push(arg(ptr_storage.last().unwrap().as_ref()));
+    for z in &argument_values {
+        if let Some(x) = z.as_ref().cast_to_klisterstr() {
+            let mut st = Vec::with_capacity(x.val.len() + 1);
+            st.extend(x.val.as_bytes());
+            st.push(0);
+            if CStr::from_bytes_with_nul(&st).is_err() {
+                return Err(KlisterRTE::new("Validation as c-string failed", true))
             }
-            KlisterValue::BInt(ref x) => {
-                let downcast_res = x.try_into();
-                let Ok(downcast_x) = downcast_res else {return Err(KlisterRTE::new("Number too big to pass", true));};
-                let downcast: c_int = downcast_x;
-                arg_storage.push(downcast.to_ne_bytes().to_vec());
-                let myref: &u8 = arg_storage.last().unwrap().first().unwrap();
-                args.push(arg(myref));
-            }
-            KlisterValue::Bytes(ref x) => {
-                ptr_storage.push(Box::new(x.as_ptr() as *mut c_void));
-                args.push(arg(ptr_storage.last().unwrap().as_ref()));
-            }
-            KlisterValue::Bool(_) => {
-                return Err(KlisterRTE::new("Can't pass booleans to c-api", false));
-            }
-            KlisterValue::MemberFunction(_, _) => {
-                return Err(KlisterRTE::new("Can't pass functions to c-api", false));
-            }
-            KlisterValue::CFunction(_) => {
-                return Err(KlisterRTE::new("Can't pass functions to c-api", false));
-            }
-            KlisterValue::KlisterFunction(_) => {
-                return Err(KlisterRTE::new("Can't pass functions to c-api", false));
-            }
-            KlisterValue::Exception(_) => {
-                return Err(KlisterRTE::new("Can't pass exception to c-api", false));
-            }
-            KlisterValue::Res(_) => {
-                return Err(KlisterRTE::new("Can't pass res to c-api", false));
-            }
-            KlisterValue::ShellRes(_) => {
-                return Err(KlisterRTE::new("Can't pass shellres to c-api", false));
-            }
-            KlisterValue::Nothing => {
-                return Err(KlisterRTE::new("Can't pass 'nothing' to c-api", false));
-            }
+            arg_storage.push(st);
+            let ptr = arg_storage.last().unwrap().as_ptr();
+            let addr = ptr as usize;
+            let bytes = addr.to_ne_bytes();
+            arg_storage.push(bytes.to_vec());
+            let myref: &u8 = arg_storage.last().unwrap().first().unwrap();
+            args.push(arg(myref));
+        } else if let Some(x) = z.as_ref().cast_to_klisterbytes() {
+            ptr_storage.push(Box::new(x.val.as_ptr() as *mut c_void));
+            args.push(arg(ptr_storage.last().unwrap().as_ref()));
+        } else if let Some(x) = z.as_ref().cast_to_klisterinteger() {
+            let downcast_res = x.val.clone().try_into();
+            let Ok(downcast_x) = downcast_res else {return Err(KlisterRTE::new("Number too big to pass", true));};
+            let downcast: c_int = downcast_x;
+            arg_storage.push(downcast.to_ne_bytes().to_vec());
+            let myref: &u8 = arg_storage.last().unwrap().first().unwrap();
+            args.push(arg(myref));
         }
     }
 
@@ -185,7 +159,7 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Kliste
             let cint = c_int::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert int"));
 
             let bint:BigInt = cint.into();
-            Ok(KlisterValue::BInt(bint))
+            Ok(KlisterInteger::wrap(bint))
         }
         _ => {
             return Err(KlisterRTE::new("Invalid return type", false));

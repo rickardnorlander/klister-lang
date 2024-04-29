@@ -4,6 +4,7 @@ mod except;
 mod interpret;
 mod parse;
 mod types;
+mod value;
 
 use std::fs;
 use std::process::ExitCode;
