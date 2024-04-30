@@ -75,7 +75,7 @@ pub enum KlisterExpression {
 #[derive(Clone)]
 #[derive(Debug)]
 pub enum KlisterStatement {
-    Function(String, Box<KlisterStatement>),
+    Function(String, Vec<String>, Box<KlisterStatement>),
     Import(String, String, String, Vec<String>),
     Assign(String, KlisterExpression),
     Expression(KlisterExpression),

@@ -139,6 +139,7 @@ impl KlisterValueV2 for KlisterResult {
     }
 }
 
+use std::iter::zip;
 
 #[derive(Debug)]
 #[derive(Clone)]
@@ -146,14 +147,21 @@ impl KlisterValueV2 for KlisterResult {
 pub struct KlisterFunction {
     #[unsafe_ignore_trace] 
     pub body: Box<KlisterStatement>,
+    pub arg_names: Vec<String>,
 }
 
 impl KlisterValueV2 for KlisterFunction {
     fn call(&self, context: &mut Context, arguments: Vec<ValWrap>) -> Result<ValWrap, KlisterRTE> {
-        if !arguments.is_empty() {
+        if arguments.len() != self.arg_names.len() {
             return Err(KlisterRTE::new("Wrong number of arguments", false));
         }
-        return handle_statement(context, self.body.as_ref()).map(|_| valwrap(KlisterNothing{}));
+        context.enter_function();
+        for (ref n, v) in zip(&self.arg_names, arguments) {
+            context.put_var(n, v)
+        }
+        let res = handle_statement(context, self.body.as_ref()).map(|_| valwrap(KlisterNothing{}));
+        context.exit_function();
+        return res;
     }
 }
 

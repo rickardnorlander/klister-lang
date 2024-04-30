@@ -5,10 +5,8 @@ import libc.so.6 int atoi(cbc)
 import libc.so.6 int write(int, cbb, int)
 import libc.so.6 int fsync(int)
 
-function writebytes() {
-    # Functions don't currently have their own variable scope
-    # Neither can they take nor return values
-    write(1, b, b.len)
+function writebytes(bytes) {
+    write(1, bytes, bytes.len)
     fsync(1)
 }
 
@@ -31,7 +29,7 @@ if (might_fail.is_ok) {
 
 
 b=`echo hello world | tr a-z A-Z|tail -c 6`
-writebytes()
+writebytes(b)
 
 asdf=atoi("10")
 while(0<asdf){

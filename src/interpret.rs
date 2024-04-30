@@ -22,12 +22,41 @@ use crate::value::bin_op;
 pub struct Context {
     #[unsafe_ignore_trace]
     pub libs: Libraries,
-    variables: HashMap<String, ValWrap>,
+    global_scope: HashMap<String, ValWrap>,
+    function_scopes: Vec<HashMap<String, ValWrap>>,
+}
+
+impl Context {
+    fn new() -> Context {
+        return Context{libs: Libraries::new(), global_scope: HashMap::new(), function_scopes: Vec::new()}
+    }
+
+    fn get_var(&self, s: &str) -> Option<&ValWrap> {
+        if let Some(f_scope) = self.function_scopes.last() {
+            if let Some(v) = f_scope.get(s) {
+                return Some(v);
+            }
+        }
+        return self.global_scope.get(s);
+    }
+
+    pub fn put_var(&mut self, s: &str, v: ValWrap) {
+        let scope: &mut _ = self.function_scopes.last_mut().unwrap_or(&mut self.global_scope);
+        scope.insert(s.to_string(), v);
+    }
+
+    pub fn enter_function(&mut self) {
+        self.function_scopes.push(HashMap::new());
+    }
+
+    pub fn exit_function(&mut self) {
+        self.function_scopes.pop();
+    }
 }
 
 fn handle_import(context: &mut Context, libname: &str, fname: &str, rettypename: &str, argnames: &Vec<String>) -> Result<(), KlisterRTE> {
     context.libs.load_fn(libname, fname, rettypename, &argnames.iter().map(String::as_str).collect::<Vec<_>>())?;
-    context.variables.insert(fname.to_string(), KlisterCFunction::wrapped(fname));
+    context.put_var(fname, KlisterCFunction::wrapped(fname));
     Ok(())
 }
 
@@ -155,7 +184,7 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
         }
         KlisterExpression::Literal(v) => {Ok(Gc::new(v.clone()))}
         KlisterExpression::Variable(v) => {
-            match context.variables.get(v) {
+            match context.get_var(v) {
                 Some(val) => Ok(val.clone()),
                 None => {return Err(KlisterRTE::new(&format!("Variable not defined {}", v), false));}
             }
@@ -204,8 +233,8 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
 
 pub fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> Result<(), KlisterRTE> {
     match statement {
-        KlisterStatement::Function(name, block) => {
-            context.variables.insert(name.to_string(), valwrap(KlisterFunction{body: block.clone()}));
+        KlisterStatement::Function(name, arg_names, block) => {
+            context.put_var(name, valwrap(KlisterFunction{body: block.clone(), arg_names: arg_names.clone()}));
             Ok(())
         }
         KlisterStatement::Import(libname, fname, rettypename, argnames) => {
@@ -218,7 +247,7 @@ pub fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> 
         }
         KlisterStatement::Assign(name, expression) => {
             let val = handle_expression(context, &expression)?;
-            context.variables.insert(name.to_string(), val);
+            context.put_var(name, val);
             Ok(())
         }
 
@@ -251,7 +280,7 @@ pub fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> 
 }
 
 pub fn interpret_ast(ast: KlisterStatement) -> Option<KlisterRTE> {
-    let mut context: Context = Context{libs: Libraries::new(), variables: HashMap::new()};
+    let mut context = Context::new();
 
     return handle_statement(&mut context, &ast).err();
 }

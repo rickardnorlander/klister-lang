@@ -419,10 +419,30 @@ fn parse_function(s: &mut&str) -> ParseResult<KlisterStatement> {
     consume("(", s)?;
     // Parameters not supported for now
     skip_space_and_newlines(s)?;
+
+    let mut arg_names = Vec::<String>::new();
+
+    let mut s2_x = *s;
+    let s2 = &mut s2_x;
+
+    if let Ok(arg0) = parse_id(s2) {
+        arg_names.push(arg0);
+        loop {
+            skip_space_and_newlines(s2)?;
+            if !consume(", ", s2).is_ok() {
+                break;
+            }
+            skip_space_and_newlines(s2)?;
+            arg_names.push(parse_id(s2)?);
+        }
+        skip_space_and_newlines(s2)?;
+        *s = *s2;
+    }
+
     consume(")", s)?;
     let body = parse_block(s)?;
 
-    return Ok(KlisterStatement::Function(name, Box::new(body)));
+    return Ok(KlisterStatement::Function(name, arg_names, Box::new(body)));
 }
 
 fn get_shell_escape(remaining: &str, c: char) -> ParseResult<char> {
