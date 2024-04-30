@@ -10,13 +10,13 @@ use crate::ccall::Libraries;
 use crate::except::KlisterRTE;
 use crate::value::KlisterResult;
 use crate::value::KlisterFunction;
-use crate::value::KlisterBool;
 use crate::value::KlisterBytes;
 use crate::value::KlisterCFunction;
 use crate::value::KlisterInteger;
 use crate::value::KlisterShellRes;
 use crate::value::ValWrap;
 use crate::value::valwrap;
+use crate::value::bin_op;
 
 #[derive(gc::Trace, gc::Finalize)]
 pub struct Context {
@@ -160,69 +160,14 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
                 None => {return Err(KlisterRTE::new(&format!("Variable not defined {}", v), false));}
             }
         }
-        KlisterExpression::Add(left, right) => {
-            let lv = unpack_int(handle_expression(context, left)?)?;
-            let rv = unpack_int(handle_expression(context, right)?)?;
-            Ok(KlisterInteger::wrap(lv+rv))
-        }
-        KlisterExpression::Sub(left, right) => {
-            let lv = unpack_int(handle_expression(context, left)?)?;
-            let rv = unpack_int(handle_expression(context, right)?)?;
-            Ok(KlisterInteger::wrap(lv-rv))
-        }
-        KlisterExpression::Mul(left, right) => {
-            let lv = unpack_int(handle_expression(context, left)?)?;
-            let rv = unpack_int(handle_expression(context, right)?)?;
-            Ok(KlisterInteger::wrap(lv*rv))
-        }
-        KlisterExpression::Div(left, right) => {
-            let lv = unpack_int(handle_expression(context, left)?)?;
-            let rv = unpack_int(handle_expression(context, right)?)?;
-            Ok(KlisterInteger::wrap(lv/rv))
-        }
-        KlisterExpression::Lt(left, right) => {
-            let lv = unpack_int(handle_expression(context, left)?)?;
-            let rv = unpack_int(handle_expression(context, right)?)?;
-            Ok(KlisterBool::v(lv<rv))
-        }
-        KlisterExpression::Gt(left, right) => {
-            let lv = unpack_int(handle_expression(context, left)?)?;
-            let rv = unpack_int(handle_expression(context, right)?)?;
-            Ok(KlisterBool::v(lv>rv))
-        }
-        KlisterExpression::Lte(left, right) => {
-            let lv = unpack_int(handle_expression(context, left)?)?;
-            let rv = unpack_int(handle_expression(context, right)?)?;
-            Ok(KlisterBool::v(lv<=rv))
-        }
-        KlisterExpression::Gte(left, right) => {
-            let lv = unpack_int(handle_expression(context, left)?)?;
-            let rv = unpack_int(handle_expression(context, right)?)?;
-            Ok(KlisterBool::v(lv>=rv))
-        }
-        KlisterExpression::Eq(left, right) => {
-            let lv = unpack_int(handle_expression(context, left)?)?;
-            let rv = unpack_int(handle_expression(context, right)?)?;
-            Ok(KlisterBool::v(lv==rv))
-        }
-        KlisterExpression::Ne(left, right) => {
-            let lv = unpack_int(handle_expression(context, left)?)?;
-            let rv = unpack_int(handle_expression(context, right)?)?;
-            Ok(KlisterBool::v(lv!=rv))
-        }
-        KlisterExpression::Or(left, right) => {
-            let lv = handle_expression(context, left)?.bool_val()?;
-            let rv = handle_expression(context, right)?.bool_val()?;
-            Ok(KlisterBool::v(lv||rv))
-        }
-        KlisterExpression::And(left, right) => {
-            let lv = handle_expression(context, left)?.bool_val()?;
-            let rv = handle_expression(context, right)?.bool_val()?;
-            Ok(KlisterBool::v(lv&&rv))
+        KlisterExpression::BinOp(op, left, right) => {
+            let lv = handle_expression(context, left)?;
+            let rv = handle_expression(context, right)?;
+            bin_op(op.clone(), lv, rv)
         }
         KlisterExpression::Not(expr) => {
-            let v = handle_expression(context, expr)?.bool_val()?;
-            Ok(KlisterBool::v(!v))
+            let v = handle_expression(context, expr)?;
+            v.un_op("!")
         }
         KlisterExpression::CatchExpr(expr) => {
             let v_res = handle_expression(context, expr);

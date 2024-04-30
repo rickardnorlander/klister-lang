@@ -38,24 +38,31 @@ impl ShellPipelineS {
     }
 }
 
+#[derive(Copy)]
+#[derive(Clone)]
+#[derive(Debug)]
+pub enum Operation {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Lt,
+    Gt,
+    Eq,
+    Lte,
+    Gte,
+    Ne,
+    Or,
+    And,
+}
+
 #[derive(Clone)]
 #[derive(Debug)]
 pub enum KlisterExpression {
     Call(Box<KlisterExpression>, Vec<KlisterExpression>),
     Index(Box<KlisterExpression>, Box<KlisterExpression>),
     Dot(Box<KlisterExpression>, String),
-    Add(Box<KlisterExpression>, Box<KlisterExpression>),
-    Sub(Box<KlisterExpression>, Box<KlisterExpression>),
-    Mul(Box<KlisterExpression>, Box<KlisterExpression>),
-    Div(Box<KlisterExpression>, Box<KlisterExpression>),
-    Lt(Box<KlisterExpression>, Box<KlisterExpression>),
-    Gt(Box<KlisterExpression>, Box<KlisterExpression>),
-    Eq(Box<KlisterExpression>, Box<KlisterExpression>),
-    Lte(Box<KlisterExpression>, Box<KlisterExpression>),
-    Gte(Box<KlisterExpression>, Box<KlisterExpression>),
-    Ne(Box<KlisterExpression>, Box<KlisterExpression>),
-    Or(Box<KlisterExpression>, Box<KlisterExpression>),
-    And(Box<KlisterExpression>, Box<KlisterExpression>),
+    BinOp(Operation, Box<KlisterExpression>, Box<KlisterExpression>),
     Not(Box<KlisterExpression>),
     CatchExpr(Box<KlisterExpression>),
     Variable(String),

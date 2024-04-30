@@ -209,9 +209,9 @@ fn parse_precedence_4(s: &mut&str) -> ParseResult<KlisterExpression> {
     while !s.is_empty() {
         skip_space(s);
         if consume("*", s).is_ok() {
-            ret = KlisterExpression::Mul(Box::new(ret), Box::new(parse_next(s)?));
+            ret = KlisterExpression::BinOp(Operation::Mul, Box::new(ret), Box::new(parse_next(s)?));
         } else if consume("/", s).is_ok() {
-            ret = KlisterExpression::Div(Box::new(ret), Box::new(parse_next(s)?));
+            ret = KlisterExpression::BinOp(Operation::Div, Box::new(ret), Box::new(parse_next(s)?));
         } else {
             break;
         }
@@ -225,9 +225,9 @@ fn parse_precedence_3(s: &mut&str) -> ParseResult<KlisterExpression> {
     while !s.is_empty() {
         skip_space(s);
         if consume("+", s).is_ok() {
-            ret = KlisterExpression::Add(Box::new(ret), Box::new(parse_next(s)?));
+            ret = KlisterExpression::BinOp(Operation::Add, Box::new(ret), Box::new(parse_next(s)?));
         } else if consume("-", s).is_ok() {
-            ret = KlisterExpression::Sub(Box::new(ret), Box::new(parse_next(s)?));
+            ret = KlisterExpression::BinOp(Operation::Sub, Box::new(ret), Box::new(parse_next(s)?));
         } else {
             break;
         }
@@ -241,17 +241,17 @@ fn parse_precedence_2(s: &mut&str) -> ParseResult<KlisterExpression> {
     if !s.is_empty() {
         skip_space(s);
         if consume("<=", s).is_ok() {
-            ret = KlisterExpression::Lte(Box::new(ret), Box::new(parse_next(s)?));
+            ret = KlisterExpression::BinOp(Operation::Lte, Box::new(ret), Box::new(parse_next(s)?));
         } else if consume(">=", s).is_ok() {
-            ret = KlisterExpression::Gte(Box::new(ret), Box::new(parse_next(s)?));
+            ret = KlisterExpression::BinOp(Operation::Gte, Box::new(ret), Box::new(parse_next(s)?));
         } else if consume("<", s).is_ok() {
-            ret = KlisterExpression::Lt(Box::new(ret), Box::new(parse_next(s)?));
+            ret = KlisterExpression::BinOp(Operation::Lt, Box::new(ret), Box::new(parse_next(s)?));
         } else if consume(">", s).is_ok() {
-            ret = KlisterExpression::Gt(Box::new(ret), Box::new(parse_next(s)?));
+            ret = KlisterExpression::BinOp(Operation::Gt, Box::new(ret), Box::new(parse_next(s)?));
         } else if consume("==", s).is_ok() {
-            ret = KlisterExpression::Eq(Box::new(ret), Box::new(parse_next(s)?));
+            ret = KlisterExpression::BinOp(Operation::Eq, Box::new(ret), Box::new(parse_next(s)?));
         } else if consume("!=", s).is_ok() {
-            ret = KlisterExpression::Ne(Box::new(ret), Box::new(parse_next(s)?));
+            ret = KlisterExpression::BinOp(Operation::Ne, Box::new(ret), Box::new(parse_next(s)?));
         }
     }
     return Ok(ret);
@@ -263,7 +263,7 @@ fn parse_precedence_1point2(s: &mut&str) -> ParseResult<KlisterExpression> {
     if !s.is_empty() {
         skip_space(s);
         if consume("&&", s).is_ok() {
-            ret = KlisterExpression::And(Box::new(ret), Box::new(parse_next(s)?));
+            ret = KlisterExpression::BinOp(Operation::And, Box::new(ret), Box::new(parse_next(s)?));
         }
     }
     return Ok(ret);
@@ -275,7 +275,7 @@ fn parse_precedence_1(s: &mut&str) -> ParseResult<KlisterExpression> {
     if !s.is_empty() {
         skip_space(s);
         if consume("||", s).is_ok() {
-            ret = KlisterExpression::Or(Box::new(ret), Box::new(parse_next(s)?));
+            ret = KlisterExpression::BinOp(Operation::Or, Box::new(ret), Box::new(parse_next(s)?));
         }
     }
     return Ok(ret);

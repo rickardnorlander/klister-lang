@@ -1,16 +1,20 @@
 
 #![allow(unused_imports)]
+
+use std::fmt::Debug;
+
+use as_any::{AsAny, Downcast};
+use dyn_clone::DynClone;
 use gc::Gc;
 use gc::Trace;
+use libffi::middle::Arg;
 
 use crate::ast::KlisterStatement;
+use crate::ast::Operation;
+use crate::ccall::ffi_call;
 use crate::except::KlisterRTE;
-use dyn_clone::DynClone;
-use std::fmt::Debug;
 use crate::interpret::Context;
 use crate::interpret::handle_statement;
-use crate::ccall::ffi_call;
-use libffi::middle::Arg;
 
 pub type ValWrap = Gc<Box<dyn KlisterValueV2>>;
 
@@ -18,11 +22,31 @@ pub fn valwrap(v: impl KlisterValueV2 + 'static) -> ValWrap {
     return Gc::new(Box::new(v))
 }
 
+pub enum Oppi<T, E> {
+    Ok(T),
+    Err(E),
+    NotSupported,
+}
+
 fn invalid_member_exception(type_s: &str, index: &str) -> KlisterRTE {
     KlisterRTE::new(&format!("{} has no member {}", type_s, index), false)
 }
 
-pub trait KlisterValueV2: Trace + DynClone + Debug {
+pub fn bin_op(op: Operation, lhs: ValWrap, rhs: ValWrap) -> Result<ValWrap, KlisterRTE> {
+    match lhs.bin_op_forward(op, (*rhs).as_ref()) {
+        Oppi::Ok(a) => {return Result::Ok(a)}
+        Oppi::Err(a) => {return Result::Err(a)}
+        Oppi::NotSupported => {}
+    }
+    match rhs.bin_op_backward(op, (*lhs).as_ref()) {
+        Oppi::Ok(a) => {return Result::Ok(a)}
+        Oppi::Err(a) => {return Result::Err(a)}
+        Oppi::NotSupported => {}
+    }
+    return Err(KlisterRTE::new("Operation not supported", false));
+}
+
+pub trait KlisterValueV2: Trace + DynClone + Debug + AsAny {
     fn dot(&self, gcself: &ValWrap, s: &str) -> Result<ValWrap, KlisterRTE>  {
         return self.dot_impl(gcself, s).ok_or_else(||invalid_member_exception(self.get_type_name(), s));
     }
@@ -57,6 +81,18 @@ pub trait KlisterValueV2: Trace + DynClone + Debug {
 
     fn cast_to_klisterinteger(&self) -> Option<&KlisterInteger>  {
         return None;
+    }
+
+    fn bin_op_forward(&self, _op: Operation, _other: &dyn KlisterValueV2) -> Oppi<ValWrap, KlisterRTE> {
+        Oppi::NotSupported
+    }
+
+    fn bin_op_backward(&self, _op: Operation, _other: &dyn KlisterValueV2) -> Oppi<ValWrap, KlisterRTE> {
+        Oppi::NotSupported
+    }
+
+    fn un_op(&self, _op: &str) -> Result<ValWrap, KlisterRTE> {
+        Err(KlisterRTE::new("Type error", false))
     }
 }
 
@@ -130,6 +166,31 @@ pub struct KlisterBool {
 impl KlisterValueV2 for KlisterBool {
     fn bool_val(&self) -> Result<bool, KlisterRTE> {
         return Ok(self.val);
+    }
+
+    fn bin_op_forward(&self, op: Operation, other_ref: &dyn KlisterValueV2) -> Oppi<ValWrap, KlisterRTE> {
+        let other_opt = other_ref.as_any().downcast_ref::<KlisterBool>();
+        if let Some(ref other) = other_opt {
+            let selfval = self.val.clone();
+            let otherval = other.val.clone();
+            match op {
+                Operation::And => {return Oppi::Ok(KlisterBool::v(selfval && otherval));}
+                Operation::Or => {return Oppi::Ok(KlisterBool::v(selfval || otherval));}
+                _ => {
+                    return Oppi::NotSupported
+                }
+            }
+        }
+        return Oppi::NotSupported
+    }
+
+    fn un_op(&self, op: &str) -> Result<ValWrap, KlisterRTE> {
+        match op {
+            "!" => {return Ok(KlisterBool::v(!self.val));}
+            _ => {
+                return Err(KlisterRTE::new(&format!("Unknown un_op {}", op), false))
+            }
+        }
     }
 }
 
@@ -249,6 +310,30 @@ impl KlisterValueV2 for KlisterInteger {
 
     fn cast_to_klisterinteger(&self) -> Option<&KlisterInteger> {
         return Some(&self)
+    }
+
+    fn bin_op_forward(&self, op: Operation, other_ref: &dyn KlisterValueV2) -> Oppi<ValWrap, KlisterRTE> {
+        let other_opt = other_ref.as_any().downcast_ref::<KlisterInteger>();
+        if let Some(ref other) = other_opt {
+            let selfval = self.val.clone();
+            let otherval = other.val.clone();
+            match op {
+                Operation::Add => {return Oppi::Ok(KlisterInteger::wrap(selfval + otherval));}
+                Operation::Sub => {return Oppi::Ok(KlisterInteger::wrap(selfval - otherval));}
+                Operation::Mul => {return Oppi::Ok(KlisterInteger::wrap(selfval * otherval));}
+                Operation::Div => {return Oppi::Ok(KlisterInteger::wrap(selfval / otherval));}
+                Operation::Eq => {return Oppi::Ok(KlisterBool::v(selfval == otherval));}
+                Operation::Ne => {return Oppi::Ok(KlisterBool::v(selfval != otherval));}
+                Operation::Lt => {return Oppi::Ok(KlisterBool::v(selfval < otherval));}
+                Operation::Gt => {return Oppi::Ok(KlisterBool::v(selfval > otherval));}
+                Operation::Lte => {return Oppi::Ok(KlisterBool::v(selfval <= otherval));}
+                Operation::Gte => {return Oppi::Ok(KlisterBool::v(selfval >= otherval));}
+                _ => {
+                    return Oppi::NotSupported
+                }
+            }
+        }
+        Oppi::NotSupported
     }
 }
 
