@@ -8,6 +8,7 @@ use regex::Regex;
 
 use crate::ast::*;
 use crate::value::KlisterInteger;
+use crate::value::KlisterDouble;
 
 #[derive(Debug)]
 pub struct SyntaxError {
@@ -99,8 +100,15 @@ fn parse_precedence_6(s: &mut& str) -> ParseResult<KlisterExpression> {
             out_str.push(c);
         }
     }
-    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[+-]?[0-9]+").unwrap());
-    if let Some(caps) = RE.captures(s) {
+    static FLOAT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[+-]?[0-9]+(\.[0-9]+|[eE][0-9]+|\.[0-9]+[eE][0-9]+)").unwrap());
+    if let Some(caps) = FLOAT_RE.captures(s) {
+        let result = caps[0].parse::<f64>().ok().context(s, "Invalid numeric literal")?;
+        *s = &s[caps[0].len()..];
+        return Ok(KlisterExpression::Literal(KlisterDouble::wrapn(result)));
+    }
+
+    static INT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[+-]?[0-9]+").unwrap());
+    if let Some(caps) = INT_RE.captures(s) {
         let result = caps[0].parse::<BigInt>().ok().context(s, "Invalid numeric literal")?;
         *s = &s[caps[0].len()..];
         return Ok(KlisterExpression::Literal(KlisterInteger::wrapn(result)));

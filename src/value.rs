@@ -8,6 +8,7 @@ use dyn_clone::DynClone;
 use gc::Gc;
 use gc::Trace;
 use libffi::middle::Arg;
+use num_traits::cast::ToPrimitive;
 
 use crate::ast::KlisterStatement;
 use crate::ast::Operation;
@@ -299,7 +300,6 @@ impl KlisterInteger {
     }
 }
 
-
 impl KlisterValueV2 for KlisterInteger {
     fn dot_impl(&self, gcself: &ValWrap, subscript: &str) -> Option<ValWrap> {
         match subscript {
@@ -321,7 +321,17 @@ impl KlisterValueV2 for KlisterInteger {
                 Operation::Add => {return Oppi::Ok(KlisterInteger::wrap(selfval + otherval));}
                 Operation::Sub => {return Oppi::Ok(KlisterInteger::wrap(selfval - otherval));}
                 Operation::Mul => {return Oppi::Ok(KlisterInteger::wrap(selfval * otherval));}
-                Operation::Div => {return Oppi::Ok(KlisterInteger::wrap(selfval / otherval));}
+                Operation::Div => {                    
+                    let lv = match bint_to_double(&self.val) {
+                        Ok(x) => x,
+                        Err(x) => {return Oppi::Err(x);},
+                    };
+                    let rv = match bint_to_double(&other.val) {
+                        Ok(x) => x,
+                        Err(x) => {return Oppi::Err(x);},
+                    };
+                    return Oppi::Ok(KlisterDouble::wrap(lv / rv));
+                }
                 Operation::Eq => {return Oppi::Ok(KlisterBool::v(selfval == otherval));}
                 Operation::Ne => {return Oppi::Ok(KlisterBool::v(selfval != otherval));}
                 Operation::Lt => {return Oppi::Ok(KlisterBool::v(selfval < otherval));}
@@ -359,7 +369,7 @@ impl KlisterValueV2 for KlisterMemberFunction {
                 _ => {}
             }
         }
-        return Err(KlisterRTE::new(&format!("Type {} has no member function {}", self.get_type_name(), self.name), false));
+        return Err(KlisterRTE::new(&format!("Type {} has no member function {}", self.obj.get_type_name(), self.name), false));
     }
 }
 
@@ -383,5 +393,93 @@ impl KlisterValueV2 for KlisterShellRes {
             "is_ok" => Some(KlisterBool::v(matches!(self, KlisterShellRes::SResOk(_)))),
             _ => None,
         }
+    }
+}
+
+fn bint_to_double(bi: &BigInt) -> Result<f64, KlisterRTE> {
+    let Some(x) = bi.to_f64() else {
+        return Err(KlisterRTE::new("Unknown error when converting integer to double", false));
+    };
+    if !x.is_finite() {
+        return Err(KlisterRTE::new("Overflow when converting integer to double", true));
+    }
+    Ok(x)
+}
+
+#[derive(Debug)]
+#[derive(Clone)]
+#[derive(gc::Trace, gc::Finalize)]
+pub struct KlisterDouble {
+    pub val: f64,
+}
+
+impl KlisterDouble {
+    pub fn wrap(v: f64) -> ValWrap {
+        return valwrap(KlisterDouble{val: v});
+    }
+    pub fn wrapn(v: f64) -> Box<dyn KlisterValueV2> {
+        return Box::new(KlisterDouble{val: v});
+    }
+
+    fn do_op(op: Operation, selfval: f64, otherval: f64) -> Oppi<ValWrap, KlisterRTE> {
+        return match op {
+            Operation::Add => Oppi::Ok(KlisterDouble::wrap(selfval + otherval)),
+            Operation::Sub => Oppi::Ok(KlisterDouble::wrap(selfval - otherval)),
+            Operation::Mul => Oppi::Ok(KlisterDouble::wrap(selfval * otherval)),
+            Operation::Div => Oppi::Ok(KlisterDouble::wrap(selfval / otherval)),
+            Operation::Eq => Oppi::Ok(KlisterBool::v(selfval == otherval)),
+            Operation::Ne => Oppi::Ok(KlisterBool::v(selfval != otherval)),
+            Operation::Lt => Oppi::Ok(KlisterBool::v(selfval < otherval)),
+            Operation::Gt => Oppi::Ok(KlisterBool::v(selfval > otherval)),
+            Operation::Lte => Oppi::Ok(KlisterBool::v(selfval <= otherval)),
+            Operation::Gte => Oppi::Ok(KlisterBool::v(selfval >= otherval)),
+            _ => {
+                Oppi::NotSupported
+            }
+        }
+    }
+
+    fn get_other(other_ref: &dyn KlisterValueV2) -> Oppi<f64, KlisterRTE> {
+        if let Some(other) = other_ref.as_any().downcast_ref::<KlisterDouble>() {
+            Oppi::Ok(other.val)
+        } else if let Some(other) = other_ref.as_any().downcast_ref::<KlisterInteger>() {
+            match bint_to_double(&other.val) {
+                Ok(x) => Oppi::Ok(x),
+                Err(x) => {return Oppi::Err(x);},
+            }
+        } else {
+            return Oppi::NotSupported
+        }
+    }
+}
+
+impl KlisterValueV2 for KlisterDouble {
+    fn dot_impl(&self, gcself: &ValWrap, subscript: &str) -> Option<ValWrap> {
+        match subscript {
+            "to_string" => Some(KlisterMemberFunction::new(gcself, subscript)),
+            _ => None,
+        }
+    }
+
+    fn bin_op_backward(&self, op: Operation, other_ref: &dyn KlisterValueV2) -> Oppi<ValWrap, KlisterRTE> {
+        let selfval = self.val.clone();
+        let otheroppi = KlisterDouble::get_other(other_ref);
+        let otherval = match otheroppi {
+            Oppi::Ok(v) => v,
+            Oppi::Err(e) => {return Oppi::Err(e)}
+            Oppi::NotSupported => {return Oppi::NotSupported}
+        };
+        return KlisterDouble::do_op(op, otherval, selfval);
+    }
+
+    fn bin_op_forward(&self, op: Operation, other_ref: &dyn KlisterValueV2) -> Oppi<ValWrap, KlisterRTE> {
+        let selfval = self.val.clone();
+        let otheroppi = KlisterDouble::get_other(other_ref);
+        let otherval = match otheroppi {
+            Oppi::Ok(v) => v,
+            Oppi::Err(e) => {return Oppi::Err(e)}
+            Oppi::NotSupported => {return Oppi::NotSupported}
+        };
+        return KlisterDouble::do_op(op, selfval, otherval);
     }
 }
