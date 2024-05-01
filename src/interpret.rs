@@ -231,50 +231,83 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
     }
 }
 
-pub fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> Result<(), KlisterRTE> {
+pub enum StatementE {
+    AllGood,
+    Return(ValWrap),
+    Err(KlisterRTE),
+}
+
+fn rtose<T>(a: Result<T, KlisterRTE>) -> StatementE {
+    match a {
+        Ok(_) => StatementE::AllGood,
+        Err(e) => StatementE::Err(e),
+    }
+}
+
+
+macro_rules! ask {
+    ($myexpr:expr) => {
+        match $myexpr {
+            Ok(v) => v,
+            Err(e) => {return StatementE::Err(e)},
+        }
+    };
+}
+
+
+pub fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> StatementE {
     match statement {
         KlisterStatement::Function(name, arg_names, block) => {
             context.put_var(name, valwrap(KlisterFunction{body: block.clone(), arg_names: arg_names.clone()}));
-            Ok(())
+            StatementE::AllGood
         }
         KlisterStatement::Import(libname, fname, rettypename, argnames) => {
-            handle_import(context, libname, fname, rettypename, argnames)?;
-            Ok(())
+            rtose(handle_import(context, libname, fname, rettypename, argnames))
         }
         KlisterStatement::Expression(expression) => {
-            handle_expression(context, &expression)?;
-            Ok(())
+            rtose(handle_expression(context, &expression))
         }
         KlisterStatement::Assign(name, expression) => {
-            let val = handle_expression(context, &expression)?;
+            let val = ask!(handle_expression(context, &expression));
             context.put_var(name, val);
-            Ok(())
+            StatementE::AllGood
         }
-
+        KlisterStatement::Return(expression) => {
+            let val = ask!(handle_expression(context, &expression));
+            StatementE::Return(val)
+        }
         KlisterStatement::Block(statements) => {
             for part in statements {
-                handle_statement(context, part)?;
+                match handle_statement(context, part) {
+                    StatementE::AllGood => {},
+                    StatementE::Err(e) => {return StatementE::Err(e)},
+                    StatementE::Return(r) => {return StatementE::Return(r)},
+                }
             }
-            Ok(())
+            StatementE::AllGood
         }
         KlisterStatement::While(condition, block) => {
             loop {
-                let cond_val = handle_expression(context, &condition)?.bool_val()?;
+                let cond_val = ask!(ask!(handle_expression(context, &condition)).bool_val());
                 if !cond_val {
                     break;
                 }
-                handle_statement(context, block)?;
+                match handle_statement(context, block) {
+                    StatementE::AllGood => {},
+                    StatementE::Err(e) => {return StatementE::Err(e)},
+                    StatementE::Return(r) => {return StatementE::Return(r)},
+                }
             }
-            Ok(())
+            StatementE::AllGood
         }
         KlisterStatement::If(condition, ifblock, elseblock_opt) => {
-            let cond_val = handle_expression(context, &condition)?.bool_val()?;
+            let cond_val = ask!(ask!(handle_expression(context, &condition)).bool_val());
             if cond_val {
                 return handle_statement(context, ifblock);
             } else if let Some(elseblock) = elseblock_opt {
                 return handle_statement(context, elseblock);
             }
-            Ok(())
+            StatementE::AllGood
         }
     }
 }
@@ -282,5 +315,9 @@ pub fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> 
 pub fn interpret_ast(ast: KlisterStatement) -> Option<KlisterRTE> {
     let mut context = Context::new();
 
-    return handle_statement(&mut context, &ast).err();
+    match handle_statement(&mut context, &ast) {
+        StatementE::AllGood => None,
+        StatementE::Err(e) => {return Some(e)},
+        StatementE::Return(_r) => {return Some(KlisterRTE::new("Global scope cannot return", false))},
+    } 
 }

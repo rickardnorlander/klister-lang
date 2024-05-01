@@ -79,6 +79,7 @@ pub enum KlisterStatement {
     Import(String, String, String, Vec<String>),
     Assign(String, KlisterExpression),
     Expression(KlisterExpression),
+    Return(KlisterExpression),
     Block(Vec<KlisterStatement>),
     While(KlisterExpression, Box<KlisterStatement>),
     If(KlisterExpression, Box<KlisterStatement>, Option<Box<KlisterStatement>>),

@@ -150,6 +150,8 @@ pub struct KlisterFunction {
     pub arg_names: Vec<String>,
 }
 
+use crate::interpret::StatementE;
+
 impl KlisterValueV2 for KlisterFunction {
     fn call(&self, context: &mut Context, arguments: Vec<ValWrap>) -> Result<ValWrap, KlisterRTE> {
         if arguments.len() != self.arg_names.len() {
@@ -159,7 +161,11 @@ impl KlisterValueV2 for KlisterFunction {
         for (ref n, v) in zip(&self.arg_names, arguments) {
             context.put_var(n, v)
         }
-        let res = handle_statement(context, self.body.as_ref()).map(|_| valwrap(KlisterNothing{}));
+        let res = match handle_statement(context, self.body.as_ref()) {
+            StatementE::AllGood => Ok(valwrap(KlisterNothing{})),
+            StatementE::Err(e) => Err(e),
+            StatementE::Return(r) => Ok(r),
+        };
         context.exit_function();
         return res;
     }

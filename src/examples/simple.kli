@@ -8,6 +8,7 @@ import libc.so.6 int fsync(int)
 function writebytes(bytes) {
     write(1, bytes, bytes.len)
     fsync(1)
+    return "Worked"
 }
 
 myputs = puts
@@ -29,7 +30,7 @@ if (might_fail.is_ok) {
 
 
 b=`echo hello world | tr a-z A-Z|tail -c 6`
-writebytes(b)
+puts(writebytes(b))
 
 asdf=atoi("10")
 while(0<asdf){

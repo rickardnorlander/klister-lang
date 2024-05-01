@@ -26,7 +26,6 @@ Quite incomplete
 
 * Command line arguments. Scripts cannot yet take command line arguments.
 * Types. Some progress on the type system. Might be completely overhauled but the result will still likely be fairly basic.
-* Functions. No support for returning values yet.
 * C-imports. Very experimental. Might be extended or removed.
 * Running programs, pipelines etc. Works but is pretty basic.
 * Interpreter error handling: In progress. The interpreter attempts to give a useful error message on syntax error (but the line/col is a little off). Some runtime errors might be made catchable or not catchable.

@@ -591,12 +591,19 @@ fn parse_shell_main(s: &mut&str) -> ParseResult<KlisterExpression> {
     return Ok(KlisterExpression::ShellPipeline(ShellPipelineS::new(cmds)))
 }
 
+fn parse_return(s: &mut&str) -> ParseResult<KlisterStatement> {
+    skip_space_and_newlines(s)?;
+    consume("return ", s)?;
+    return Ok(KlisterStatement::Return(parse_precedence_1(s)?));
+}
+
 fn parse_statement(remaining: &mut&str) -> ParseResult<KlisterStatement> {
     skip_space_and_newlines(remaining)?;
     static IMPORT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^import ").unwrap());
     static WHILE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^while[ (]").unwrap());
     static IF_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^if[ (]").unwrap());
     static FUNCTION_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^function ").unwrap());
+    static RETURN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^return ").unwrap());
     if IMPORT_RE.is_match(remaining) {
         return parse_import(remaining);
     } else if WHILE_RE.is_match(remaining) {
@@ -605,6 +612,8 @@ fn parse_statement(remaining: &mut&str) -> ParseResult<KlisterStatement> {
         return parse_if(remaining);
     } else if FUNCTION_RE.is_match(remaining) {
         return parse_function(remaining);
+    } else if RETURN_RE.is_match(remaining){
+        return parse_return(remaining);
     } else {
         return parse_precedence_0(remaining);
     }
