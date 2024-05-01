@@ -11,12 +11,8 @@ function writebytes(bytes) {
     return "Worked"
 }
 
-ind = 0
-argc = argv.len
-
-while (ind < argc) {
-    puts(argv[ind])
-    ind = ind + 1
+for (arg in argv) {
+    puts(arg)
 }
 
 myputs = puts

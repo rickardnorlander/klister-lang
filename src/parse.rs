@@ -385,6 +385,23 @@ fn parse_while(s: &mut&str) -> ParseResult<KlisterStatement> {
     return Ok(KlisterStatement::While(expr, Box::new(body)));
 }
 
+fn parse_for(s: &mut&str) -> ParseResult<KlisterStatement> {
+    skip_space_and_newlines(s)?;
+    consume("for", s)?;
+    skip_space_and_newlines(s)?;
+    consume("(", s)?;
+    skip_space_and_newlines(s)?;
+    let idid = parse_id(s)?;
+    skip_space_and_newlines(s)?;
+    consume("in", s)?;
+    skip_space_and_newlines(s)?;
+    let expr = parse_precedence_1(s)?;
+    skip_space_and_newlines(s)?;
+    consume(")", s)?;
+    let body = parse_block(s)?;
+    return Ok(KlisterStatement::ForEach(idid, expr, Box::new(body)));
+}
+
 fn parse_if(s: &mut&str) -> ParseResult<KlisterStatement> {
     skip_space_and_newlines(s)?;
     consume("if", s)?;
@@ -604,6 +621,7 @@ fn parse_statement(remaining: &mut&str) -> ParseResult<KlisterStatement> {
     static WHILE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^while[ (]").unwrap());
     static IF_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^if[ (]").unwrap());
     static FUNCTION_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^function ").unwrap());
+    static FOR_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^for[ (]").unwrap());
     static RETURN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^return ").unwrap());
     if IMPORT_RE.is_match(remaining) {
         return parse_import(remaining);
@@ -615,6 +633,8 @@ fn parse_statement(remaining: &mut&str) -> ParseResult<KlisterStatement> {
         return parse_function(remaining);
     } else if RETURN_RE.is_match(remaining){
         return parse_return(remaining);
+    } else if FOR_RE.is_match(remaining){
+        return parse_for(remaining);
     } else {
         return parse_precedence_0(remaining);
     }

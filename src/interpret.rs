@@ -237,6 +237,8 @@ macro_rules! ask {
     };
 }
 
+use crate::value::KlisterInteger;
+use crate::value::KlisterValueV2;
 
 pub fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> StatementE {
     match statement {
@@ -289,6 +291,24 @@ pub fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> 
                 return handle_statement(context, ifblock);
             } else if let Some(elseblock) = elseblock_opt {
                 return handle_statement(context, elseblock);
+            }
+            StatementE::AllGood
+        }
+        KlisterStatement::ForEach(varname, expr, block) => {
+            let arraylike = ask!(handle_expression(context, &expr));
+            let len = ask!(arraylike.dot(&arraylike, "len"));
+            let xx: &dyn KlisterValueV2 = (*len).as_ref();
+            let len: usize = xx.as_any().downcast_ref::<KlisterInteger>().unwrap().val.clone().try_into().unwrap();
+            for i in 0..len {
+                let v = ask!(arraylike.subscript(context, &valwrap(KlisterInteger{val: i.into()})));
+
+                context.put_var(varname, v);
+
+                match handle_statement(context, block) {
+                    StatementE::AllGood => {},
+                    StatementE::Err(e) => {return StatementE::Err(e)},
+                    StatementE::Return(r) => {return StatementE::Return(r)},
+                }
             }
             StatementE::AllGood
         }

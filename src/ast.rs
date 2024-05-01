@@ -79,4 +79,5 @@ pub enum KlisterStatement {
     Block(Vec<KlisterStatement>),
     While(KlisterExpression, Box<KlisterStatement>),
     If(KlisterExpression, Box<KlisterStatement>, Option<Box<KlisterStatement>>),
+    ForEach(String, KlisterExpression, Box<KlisterStatement>),
 }
