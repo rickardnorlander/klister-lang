@@ -72,18 +72,6 @@ pub trait KlisterValueV2: Trace + DynClone + Debug + AsAny {
         return Err(KlisterRTE::new("Not string", false));
     }
 
-    fn cast_to_klisterstr(&self) -> Option<&KlisterStr>  {
-        return None;
-    }
-
-    fn cast_to_klisterbytes(&self) -> Option<&KlisterBytes>  {
-        return None;
-    }
-
-    fn cast_to_klisterinteger(&self) -> Option<&KlisterInteger>  {
-        return None;
-    }
-
     fn bin_op_forward(&self, _op: Operation, _other: &dyn KlisterValueV2) -> Oppi<ValWrap, KlisterRTE> {
         Oppi::NotSupported
     }
@@ -274,10 +262,6 @@ impl KlisterValueV2 for KlisterStr {
         return Ok(self.val.clone());
     }
 
-    fn cast_to_klisterstr(&self) -> Option<&KlisterStr> {
-        return Some(&self)
-    }
-
     fn subscript(&self, _context: &mut Context, subscript: &ValWrap) -> Result<ValWrap, KlisterRTE>  {
         let xx: &dyn KlisterValueV2 = (**subscript).as_ref();
         let Some(index) = xx.as_any().downcast_ref::<KlisterInteger>() else {
@@ -310,10 +294,6 @@ impl KlisterValueV2 for KlisterBytes {
             _ => None,
         }
     }
-
-    fn cast_to_klisterbytes(&self) -> Option<&KlisterBytes> {
-        return Some(&self)
-    }
 }
 
 use num_bigint::BigInt;
@@ -341,10 +321,6 @@ impl KlisterValueV2 for KlisterInteger {
             "to_string" => Some(KlisterMemberFunction::new(gcself, subscript)),
             _ => None,
         }
-    }
-
-    fn cast_to_klisterinteger(&self) -> Option<&KlisterInteger> {
-        return Some(&self)
     }
 
     fn bin_op_forward(&self, op: Operation, other_ref: &dyn KlisterValueV2) -> Oppi<ValWrap, KlisterRTE> {
@@ -393,7 +369,8 @@ pub struct KlisterMemberFunction {
 
 impl KlisterValueV2 for KlisterMemberFunction {
     fn call(&self, _context: &mut Context, arguments: Vec<ValWrap>) -> Result<ValWrap, KlisterRTE> {
-        if let Some(ref x) = self.obj.cast_to_klisterinteger() {
+        let xx: &dyn KlisterValueV2 = (*self.obj).as_ref();
+        if let Some(ref x) = xx.as_any().downcast_ref::<KlisterInteger>() {
             match self.name.as_str() {
                 "to_string" => {
                     if arguments.len() != 0 {

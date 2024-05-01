@@ -15,8 +15,10 @@ use num_bigint::BigInt;
 
 use crate::except::KlisterRTE;
 use crate::types::TypeTag;
+use crate::value::KlisterBytes;
 use crate::value::KlisterInteger;
 use crate::value::KlisterValueV2;
+use crate::value::KlisterStr;
 use crate::value::ValWrap;
 
 type LmidT = c_long;
@@ -114,7 +116,8 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dy
     let mut ptr_storage = Vec::<Box<*mut c_void>>::new();
 
     for z in &argument_values {
-        if let Some(x) = z.as_ref().cast_to_klisterstr() {
+        let xx: &dyn KlisterValueV2 = (*z).as_ref();
+        if let Some(x) = xx.as_any().downcast_ref::<KlisterStr>() {
             let mut st = Vec::with_capacity(x.val.len() + 1);
             st.extend(x.val.as_bytes());
             st.push(0);
@@ -128,10 +131,10 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dy
             arg_storage.push(bytes.to_vec());
             let myref: &u8 = arg_storage.last().unwrap().first().unwrap();
             args.push(arg(myref));
-        } else if let Some(x) = z.as_ref().cast_to_klisterbytes() {
+        } else if let Some(x) = xx.as_any().downcast_ref::<KlisterBytes>() {
             ptr_storage.push(Box::new(x.val.as_ptr() as *mut c_void));
             args.push(arg(ptr_storage.last().unwrap().as_ref()));
-        } else if let Some(x) = z.as_ref().cast_to_klisterinteger() {
+        } else if let Some(x) = xx.as_any().downcast_ref::<KlisterInteger>() {
             let downcast_res = x.val.clone().try_into();
             let Ok(downcast_x) = downcast_res else {return Err(KlisterRTE::new("Number too big to pass", true));};
             let downcast: c_int = downcast_x;
