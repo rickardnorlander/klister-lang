@@ -1,6 +1,7 @@
 
 #![allow(unused_imports)]
 
+use std::collections::HashMap;
 use std::fmt::Debug;
 
 use as_any::{AsAny, Downcast};
@@ -573,5 +574,25 @@ impl KlisterValueV2 for KlisterArray {
             "len" => Some(KlisterInteger::wrap(self.val.len().into())),
             _ => None,
         }
+    }
+}
+
+#[derive(Debug)]
+#[derive(Clone)]
+#[derive(gc::Trace, gc::Finalize)]
+pub struct KlisterDict {
+    pub val: HashMap<String, ValWrap>,
+}
+
+impl KlisterValueV2 for KlisterDict {
+    fn subscript(&self, _context: &mut Context, subscript: &ValWrap) -> Result<ValWrap, KlisterRTE>  {
+        let xx: &dyn KlisterValueV2 = (**subscript).as_ref();
+        let Some(index) = xx.as_any().downcast_ref::<KlisterStr>() else {
+            return Err(KlisterRTE::new("Index is not string", false));
+        };
+        let Some(ret): Option<&ValWrap> = self.val.get(&index.val) else {
+            return Err(KlisterRTE::new("Index not present", true));
+        };
+        Ok(ret.clone())
     }
 }

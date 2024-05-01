@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env;
 use std::io::Write;
 use std::process::Command;
 
@@ -7,16 +8,17 @@ use gc::Gc;
 use crate::ast::*;
 use crate::ccall::Libraries;
 use crate::except::KlisterRTE;
+use crate::value::bin_op;
 use crate::value::KlisterArray;
-use crate::value::KlisterResult;
-use crate::value::KlisterFunction;
 use crate::value::KlisterBytes;
 use crate::value::KlisterCFunction;
+use crate::value::KlisterDict;
+use crate::value::KlisterFunction;
+use crate::value::KlisterResult;
 use crate::value::KlisterShellRes;
 use crate::value::KlisterStr;
 use crate::value::ValWrap;
 use crate::value::valwrap;
-use crate::value::bin_op;
 
 #[derive(gc::Trace, gc::Finalize)]
 pub struct Context {
@@ -321,6 +323,9 @@ pub fn interpret_ast(ast: KlisterStatement, arguments: Vec<String>) -> Option<Kl
     let wrapped_argv = valwrap(KlisterArray{val: arguments.into_iter().map(|x| valwrap(KlisterStr{val: x})).collect::<Vec<ValWrap>>()});
 
     context.put_var("argv", wrapped_argv);
+
+    let wrapped_env_vars = valwrap(KlisterDict{val: env::vars().map(|(x,y)| (x, valwrap(KlisterStr{val: y}))).collect()});
+    context.put_var("env", wrapped_env_vars);
 
     match handle_statement(&mut context, &ast) {
         StatementE::AllGood => None,
