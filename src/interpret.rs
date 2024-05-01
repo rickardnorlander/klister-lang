@@ -3,17 +3,17 @@ use std::io::Write;
 use std::process::Command;
 
 use gc::Gc;
-use num_bigint::BigInt;
 
 use crate::ast::*;
 use crate::ccall::Libraries;
 use crate::except::KlisterRTE;
+use crate::value::KlisterArray;
 use crate::value::KlisterResult;
 use crate::value::KlisterFunction;
 use crate::value::KlisterBytes;
 use crate::value::KlisterCFunction;
-use crate::value::KlisterInteger;
 use crate::value::KlisterShellRes;
+use crate::value::KlisterStr;
 use crate::value::ValWrap;
 use crate::value::valwrap;
 use crate::value::bin_op;
@@ -58,13 +58,6 @@ fn handle_import(context: &mut Context, libname: &str, fname: &str, rettypename:
     context.libs.load_fn(libname, fname, rettypename, &argnames.iter().map(String::as_str).collect::<Vec<_>>())?;
     context.put_var(fname, KlisterCFunction::wrapped(fname));
     Ok(())
-}
-
-fn unpack_int(kv: ValWrap) -> Result<BigInt, KlisterRTE> {
-    if let Some(ref lv) = kv.cast_to_klisterinteger() {
-        return Ok(lv.val.clone());
-    }
-    Err(KlisterRTE::new("Type error", false))
 }
 
 fn handle_shell_arg(context: &mut Context, argona: &Argon) -> Result<String, KlisterRTE> {
@@ -164,19 +157,9 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
             return v.call(context, argument_values)
         }
         KlisterExpression::Index(arr, index) => {
-            let lv = handle_expression(context, arr)?.str_val()?;
-            let rv = unpack_int(handle_expression(context, index)?)?;
-            let s = lv.as_str();
-            let Ok(ind) = rv.try_into() else {
-                return Err(KlisterRTE::new("Index is not valid usize", false));
-            };
-            let Some(nthchar) = s.chars().nth(ind) else {
-                return Err(KlisterRTE::new("Index out of bounds", false));
-            };
-
-            let cu32 = nthchar as u32;
-            let bi:BigInt = cu32.into();
-            Ok(KlisterInteger::wrap(bi))
+            let lv = handle_expression(context, arr)?;
+            let rv = handle_expression(context, index)?;
+            return lv.subscript(context, &rv);
         }
         KlisterExpression::Dot(obj_expr, subscript) => {
             let obj = handle_expression(context, obj_expr)?;
@@ -312,8 +295,12 @@ pub fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> 
     }
 }
 
-pub fn interpret_ast(ast: KlisterStatement) -> Option<KlisterRTE> {
+pub fn interpret_ast(ast: KlisterStatement, arguments: Vec<String>) -> Option<KlisterRTE> {
     let mut context = Context::new();
+
+    let wrapped_argv = valwrap(KlisterArray{val: arguments.into_iter().map(|x| valwrap(KlisterStr{val: x})).collect::<Vec<ValWrap>>()});
+
+    context.put_var("argv", wrapped_argv);
 
     match handle_statement(&mut context, &ast) {
         StatementE::AllGood => None,

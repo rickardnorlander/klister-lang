@@ -24,7 +24,6 @@ A lot of new bash code is being written despite it being an aged language with m
 
 Quite incomplete
 
-* Command line arguments. Scripts cannot yet take command line arguments.
 * Types. Some progress on the type system. Might be completely overhauled but the result will still likely be fairly basic.
 * C-imports. Very experimental. Might be extended or removed.
 * Running programs, pipelines etc. Works but is pretty basic.

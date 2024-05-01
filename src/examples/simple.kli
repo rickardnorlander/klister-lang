@@ -11,6 +11,14 @@ function writebytes(bytes) {
     return "Worked"
 }
 
+ind = 0
+argc = argv.len
+
+while (ind < argc) {
+    puts(argv[ind])
+    ind = ind + 1
+}
+
 myputs = puts
 # Comment a
 myputs("Bye")  # Comment

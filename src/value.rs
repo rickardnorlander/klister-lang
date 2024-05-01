@@ -95,6 +95,10 @@ pub trait KlisterValueV2: Trace + DynClone + Debug + AsAny {
     fn un_op(&self, _op: &str) -> Result<ValWrap, KlisterRTE> {
         Err(KlisterRTE::new("Type error", false))
     }
+
+    fn subscript(&self, _context: &mut Context, _subscript: &ValWrap) -> Result<ValWrap, KlisterRTE>  {
+        return Err(KlisterRTE::new("Object is not subscriptable", false));
+    }
 }
 
 
@@ -272,6 +276,23 @@ impl KlisterValueV2 for KlisterStr {
 
     fn cast_to_klisterstr(&self) -> Option<&KlisterStr> {
         return Some(&self)
+    }
+
+    fn subscript(&self, _context: &mut Context, subscript: &ValWrap) -> Result<ValWrap, KlisterRTE>  {
+        let xx: &dyn KlisterValueV2 = (**subscript).as_ref();
+        let Some(index) = xx.as_any().downcast_ref::<KlisterInteger>() else {
+            return Err(KlisterRTE::new("Index is not integer", false));
+        };
+        let Ok(ind) = index.val.clone().try_into() else {
+            return Err(KlisterRTE::new("Index is not valid usize", false));
+        };
+        let Some(nthchar) = self.val.chars().nth(ind) else {
+            return Err(KlisterRTE::new("Index out of bounds", false));
+        };
+
+        let cu32 = nthchar as u32;
+        let bi:BigInt = cu32.into();
+        Ok(KlisterInteger::wrap(bi))
     }
 }
 
@@ -495,5 +516,35 @@ impl KlisterValueV2 for KlisterDouble {
             Oppi::NotSupported => {return Oppi::NotSupported}
         };
         return KlisterDouble::do_op(op, selfval, otherval);
+    }
+}
+
+
+#[derive(Debug)]
+#[derive(Clone)]
+#[derive(gc::Trace, gc::Finalize)]
+pub struct KlisterArray {
+    pub val: Vec<ValWrap>,
+}
+
+impl KlisterValueV2 for KlisterArray {
+    fn subscript(&self, _context: &mut Context, subscript: &ValWrap) -> Result<ValWrap, KlisterRTE>  {
+        let xx: &dyn KlisterValueV2 = (**subscript).as_ref();
+        let Some(index) = xx.as_any().downcast_ref::<KlisterInteger>() else {
+            return Err(KlisterRTE::new("Index is not integer", false));
+        };
+        let Ok(ind): Result<usize, _> = index.val.clone().try_into() else {
+            return Err(KlisterRTE::new("Index is not valid usize", false));
+        };
+        let Some(ret): Option<&ValWrap> = self.val.get(ind) else {
+            return Err(KlisterRTE::new("Index out of bounds", false));
+        };
+        Ok(ret.clone())
+    }
+    fn dot_impl(&self, _gcself: &ValWrap, subscript: &str) -> Option<ValWrap> {
+        match subscript {
+            "len" => Some(KlisterInteger::wrap(self.val.len().into())),
+            _ => None,
+        }
     }
 }
