@@ -1,0 +1,14 @@
+import libc.so.6 int puts(cbc)
+
+function factorial(v) {
+    if (v < 1) {
+        # Will raise exception
+        `false`
+    }
+    if (v == 1) {
+        return 1
+    }
+    return v * factorial(v - 1)
+}
+
+puts(factorial(30).to_string())
