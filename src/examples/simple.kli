@@ -40,6 +40,14 @@ if (might_fail.is_ok) {
 b=`echo hello world | tr a-z A-Z|tail -c 6`
 puts(writebytes(b))
 
+myarr = `find src -print0`.read0_strs()
+len = myarr.len
+ind = 0
+while (ind < len) {
+    puts(myarr[ind])
+    ind = ind + 1
+}
+
 asdf=atoi("10")
 while(0<asdf){
     puts("Looping")
