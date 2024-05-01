@@ -100,7 +100,7 @@ fn parse_precedence_6(s: &mut& str) -> ParseResult<KlisterExpression> {
             out_str.push(c);
         }
     }
-    static FLOAT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[+-]?[0-9]+(\.[0-9]+|[eE][0-9]+|\.[0-9]+[eE][0-9]+)").unwrap());
+    static FLOAT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[+-]?[0-9]+(\.[0-9]+|[eE]-?[0-9]+|\.[0-9]+[eE]-?[0-9]+)").unwrap());
     if let Some(caps) = FLOAT_RE.captures(s) {
         let result = caps[0].parse::<f64>().ok().context(s, "Invalid numeric literal")?;
         *s = &s[caps[0].len()..];
@@ -294,8 +294,7 @@ fn parse_precedence_0(s: &mut&str) -> ParseResult<KlisterStatement> {
     let s2:&mut&str = &mut s2_x;
     let idid = parse_id(s2);
     skip_space(s2);
-    // todo: Need to handle == 
-    if idid.is_ok() && consume("=", s2).is_ok() {
+    if idid.is_ok() && consume("==", s2).is_err() && consume("=", s2).is_ok() {
         let ret = KlisterStatement::Assign(idid?, parse_precedence_1(s2)?);
         *s = *s2;
         return Ok(ret);

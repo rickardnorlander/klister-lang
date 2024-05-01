@@ -294,6 +294,7 @@ impl KlisterValueV2 for KlisterBytes {
             "len" => Some(KlisterInteger::wrap(self.val.len().into())),
             "read0_strs" => Some(KlisterMemberFunction::new(gcself, subscript)),
             "read0" => Some(KlisterMemberFunction::new(gcself, subscript)),
+            "parse_string" => Some(KlisterMemberFunction::new(gcself, subscript)),
             _ => None,
         }
     }
@@ -428,6 +429,15 @@ impl KlisterValueV2 for KlisterMemberFunction {
                         return Err(KlisterRTE::new("Trailing garbage for read0", true));
                     }
                     return Ok(valwrap(KlisterArray{val: result}));
+                }
+                "parse_string" => {
+                    if arguments.len() != 0 {
+                        return Err(KlisterRTE::new("Wrong number of arguments", false));
+                    }
+                    let Ok(s) = String::from_utf8(x.val.clone()) else {
+                        return Err(KlisterRTE::new("Not valid string", false));
+                    };
+                    return Ok(valwrap(KlisterStr{val: s}));
                 }
                 _ => {}
             }
