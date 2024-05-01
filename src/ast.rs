@@ -29,12 +29,8 @@ pub struct ShellPipelineS {
 }
 
 impl ShellPipelineS {
-    pub fn new(cmds: Vec<ShellCommand>) -> ShellPipelineS {
-        ShellPipelineS{commands: cmds, is_catch: false}
-    }
-
-    pub fn catching(cmds: Vec<ShellCommand>) -> ShellPipelineS {
-        ShellPipelineS{commands: cmds, is_catch: true}
+    pub fn new(commands: Vec<ShellCommand>, is_catch: bool) -> ShellPipelineS {
+        ShellPipelineS{commands, is_catch}
     }
 }
 

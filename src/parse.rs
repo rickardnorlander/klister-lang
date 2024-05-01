@@ -9,6 +9,7 @@ use regex::Regex;
 use crate::ast::*;
 use crate::value::KlisterInteger;
 use crate::value::KlisterDouble;
+use crate::value::KlisterStr;
 
 #[derive(Debug)]
 pub struct SyntaxError {
@@ -77,7 +78,6 @@ fn parse_catch_expr(s: &mut&str) -> ParseResult<KlisterExpression> {
     consume(")", s)?;
     return Ok(res);
 }
-use crate::value::KlisterStr;
 
 fn parse_precedence_6(s: &mut& str) -> ParseResult<KlisterExpression> {
     skip_space(s);
@@ -113,7 +113,7 @@ fn parse_precedence_6(s: &mut& str) -> ParseResult<KlisterExpression> {
         *s = &s[caps[0].len()..];
         return Ok(KlisterExpression::Literal(KlisterInteger::wrapn(result)));
     }
-    static SHELL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^`").unwrap());
+    static SHELL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\??`").unwrap());
     if SHELL_RE.is_match(s) {
         return parse_shell_main(s);
     }
@@ -572,6 +572,7 @@ fn parse_shell_command(s: &mut&str) -> ParseResult<ShellCommand> {
 fn parse_shell_main(s: &mut&str) -> ParseResult<KlisterExpression> {
     // todo: Possibly rethink newline handling in shell environment.
     skip_space(s);
+    let is_catching = consume("?", s).is_ok();
     consume("`", s)?;
     let mut cmds = Vec::<ShellCommand>::new();
     skip_shell_separators(s);
@@ -588,7 +589,7 @@ fn parse_shell_main(s: &mut&str) -> ParseResult<KlisterExpression> {
     if cmds.len() == 0 {
         synerr!(s, "No cmds");
     }
-    return Ok(KlisterExpression::ShellPipeline(ShellPipelineS::new(cmds)))
+    return Ok(KlisterExpression::ShellPipeline(ShellPipelineS::new(cmds, is_catching)))
 }
 
 fn parse_return(s: &mut&str) -> ParseResult<KlisterStatement> {

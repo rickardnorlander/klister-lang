@@ -23,7 +23,7 @@ myputs = puts
 # Comment a
 myputs("Bye")  # Comment
 
-if(?(`false`).is_ok){
+if(?`false`.is_ok){
     puts("Never")
 }
 asdf="yes"
