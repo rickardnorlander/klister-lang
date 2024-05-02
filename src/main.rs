@@ -3,6 +3,7 @@ mod ccall;
 mod except;
 mod interpret;
 mod parse;
+mod shellparser;
 mod types;
 mod value;
 

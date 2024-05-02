@@ -20,6 +20,7 @@ pub enum Argon {
 #[derive(Clone)]
 #[derive(Debug)]
 pub struct ShellCommand{pub command: Argon, pub args: Vec<Argon>}
+//pub struct ShellCommand{pub command: Argon, pub args: Vec<Argon>, pub stdin: Option<String>, pub stdout: Option<String>, pub stderr: Option<String>, pub stderr_merge_into_stdout: bool, pub stdout_merge_into_stderr: bool}
 
 #[derive(Clone)]
 #[derive(Debug)]
