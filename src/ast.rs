@@ -27,11 +27,12 @@ pub struct ShellCommand{pub command: Argon, pub args: Vec<Argon>}
 pub struct ShellPipelineS {
     pub commands: Vec<ShellCommand>,
     pub is_catch: bool,
+    pub is_write: bool,
 }
 
 impl ShellPipelineS {
-    pub fn new(commands: Vec<ShellCommand>, is_catch: bool) -> ShellPipelineS {
-        ShellPipelineS{commands, is_catch}
+    pub fn new(commands: Vec<ShellCommand>, is_catch: bool, is_write: bool) -> ShellPipelineS {
+        ShellPipelineS{commands, is_catch, is_write}
     }
 }
 

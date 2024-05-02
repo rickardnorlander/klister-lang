@@ -115,7 +115,7 @@ fn parse_precedence_6(s: &mut& str) -> ParseResult<KlisterExpression> {
         *s = &s[caps[0].len()..];
         return Ok(KlisterExpression::Literal(KlisterInteger::wrapn(result)));
     }
-    static SHELL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\??`").unwrap());
+    static SHELL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\??w?`").unwrap());
     if SHELL_RE.is_match(s) {
         return parse_shell_main(s);
     }

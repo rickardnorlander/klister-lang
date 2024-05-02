@@ -117,6 +117,9 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<K
 
     let mut output_opt: Option<Vec<u8>> = None;
 
+    let mut i = 0;
+    let cmdlen = cmds.len();
+
     for cmd in cmds.into_iter() {
         let stdinxxx = match output_opt.is_some() {
             true => std::process::Stdio::piped(),
@@ -128,7 +131,11 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<K
             return Err(KlisterRTE::new("Command len was not 1", false));
         }
         let command = command.first().unwrap();
-        let child_res = Command::new(command).args(args).stdin(stdinxxx).stderr(std::process::Stdio::inherit()).stdout(std::process::Stdio::piped()).spawn();
+
+        let go_through = i == cmdlen-1 && sp.is_write;
+
+        let stdoutxxx = if go_through {std::process::Stdio::inherit()} else {std::process::Stdio::piped()};
+        let child_res = Command::new(command).args(args).stdin(stdinxxx).stderr(std::process::Stdio::inherit()).stdout(stdoutxxx).spawn();
         let Ok(mut child) = child_res else {
             return Ok(KlisterShellRes::SResErr(KlisterRTE::new("Failed to spawn child", true), Vec::new(), None));
         };
@@ -166,6 +173,7 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<K
             return Ok(scope_result);
         };
         // todo: Unnecessary clones here, clean this up.
+        i+=1;
         output_opt = Some(v.clone())
     }
     let output = output_opt.expect("Internal interpreter error: Output was none");

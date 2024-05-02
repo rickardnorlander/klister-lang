@@ -151,6 +151,7 @@ pub fn parse_shell_main(s: &mut&str) -> ParseResult<KlisterExpression> {
     // todo: Possibly rethink newline handling in shell environment.
     skip_space(s);
     let is_catching = consume("?", s).is_ok();
+    let is_write = consume("w", s).is_ok();
     consume("`", s)?;
     let mut cmds = Vec::<ShellCommand>::new();
     skip_shell_separators(s);
@@ -167,5 +168,5 @@ pub fn parse_shell_main(s: &mut&str) -> ParseResult<KlisterExpression> {
     if cmds.len() == 0 {
         synerr!(s, "No cmds");
     }
-    return Ok(KlisterExpression::ShellPipeline(ShellPipelineS::new(cmds, is_catching)))
+    return Ok(KlisterExpression::ShellPipeline(ShellPipelineS::new(cmds, is_catching, is_write)))
 }
