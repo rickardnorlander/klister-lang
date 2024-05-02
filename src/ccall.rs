@@ -110,14 +110,28 @@ impl Libraries {
     }
 }
 
+use std::iter::zip;
+use crate::types::OwnershipTag;
+use crate::types::Mutability;
+
 pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dyn KlisterValueV2>>) -> Result<ValWrap, KlisterRTE> {
     let mut args = Vec::<Arg>::new();
     let mut arg_storage = Vec::<Vec<u8>>::new();
     let mut ptr_storage = Vec::<Box<*mut c_void>>::new();
 
-    for z in &argument_values {
+    let fn_data = libs.functions.get(&fn_name as &str).expect("Internal interpreter error: Function not found");
+    let FunctionData{ptr: fn_ptr, cif, retstr: rettypename, args: argtypes} = fn_data;
+
+    if argument_values.len() != argtypes.len() {
+        return Err(KlisterRTE::new(&format!("Wrong number of arguments {} {} {}", fn_name, argument_values.len(), argtypes.len()), false))
+    }
+
+    for (z, argtype) in zip(&argument_values, argtypes) {
         let xx: &dyn KlisterValueV2 = (*z).as_ref();
         if let Some(x) = xx.as_any().downcast_ref::<KlisterStr>() {
+            if *argtype != TypeTag::KlisterCStr(OwnershipTag::Borrowed, Mutability::Const) {
+                return Err(KlisterRTE::new("Invalid argument type", false));
+            }
             let mut st = Vec::with_capacity(x.val.len() + 1);
             st.extend(x.val.as_bytes());
             st.push(0);
@@ -132,9 +146,15 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dy
             let myref: &u8 = arg_storage.last().unwrap().first().unwrap();
             args.push(arg(myref));
         } else if let Some(x) = xx.as_any().downcast_ref::<KlisterBytes>() {
+            if *argtype != TypeTag::KlisterBytes {
+                return Err(KlisterRTE::new("Invalid argument type", false));
+            }
             ptr_storage.push(Box::new(x.val.as_ptr() as *mut c_void));
             args.push(arg(ptr_storage.last().unwrap().as_ref()));
         } else if let Some(x) = xx.as_any().downcast_ref::<KlisterInteger>() {
+            if *argtype != TypeTag::KlisterInt {
+                return Err(KlisterRTE::new("Invalid argument type", false));
+            }
             let downcast_res = x.val.clone().try_into();
             let Ok(downcast_x) = downcast_res else {return Err(KlisterRTE::new("Number too big to pass", true));};
             let downcast: c_int = downcast_x;
@@ -144,9 +164,6 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dy
         }
     }
 
-
-    let fn_data = libs.functions.get(&fn_name as &str).expect("Internal interpreter error: Function not found");
-    let FunctionData{ptr: fn_ptr, cif, retstr: rettypename, args:_} = fn_data;
     let codeptr = low::CodePtr::from_ptr(*fn_ptr);
 
     let tt = TypeTag::from_string(&rettypename).ok_or(KlisterRTE::new("Unknown type tag", false))?;

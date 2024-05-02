@@ -6,17 +6,20 @@ use libffi::middle::Type;
 
 #[derive(Clone)]
 #[derive(Debug)]
+#[derive(PartialEq)]
 pub enum OwnershipTag {
     Borrowed, OwnedMalloced, Owned
 }
 #[derive(Clone)]
 #[derive(Debug)]
+#[derive(PartialEq)]
 pub enum Mutability {
     Mutable, Const
 }
 
 #[derive(Clone)]
 #[derive(Debug)]
+#[derive(PartialEq)]
 pub enum TypeTag {
     KlisterInt, KlisterCStr(OwnershipTag, Mutability), KlisterPtr(Box<TypeTag>, OwnershipTag, Mutability), KlisterBytes
 }
