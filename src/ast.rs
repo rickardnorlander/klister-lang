@@ -5,16 +5,16 @@ use crate::value::KlisterValueV2;
 #[derive(Clone)]
 #[derive(Debug)]
 pub enum GlobPart {
-    GlobPartS(String),
-    GlobPartAsterisk,
-    GlobPartInterpolation(Box<KlisterExpression>),
+    Str(String),
+    Asterisk,
+    ArrayInterpolation(Box<KlisterExpression>),
+    Interpolation(Box<KlisterExpression>),
 }
 
 #[derive(Clone)]
 #[derive(Debug)]
 pub enum Argon {
     ArgonGlob(Vec<GlobPart>),
-    ArgonArrayRef(String),
 }
 
 #[derive(Clone)]

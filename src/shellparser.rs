@@ -24,6 +24,8 @@ fn get_shell_escape(remaining: &str, c: char) -> ParseResult<char> {
         '|' => '|',
         '$' => '$',
         '*' => '*',
+        '<' => '<',
+        '>' => '>',
         _ => {
             synerr!(remaining, "Unknown escape sequence");
         }
@@ -31,15 +33,22 @@ fn get_shell_escape(remaining: &str, c: char) -> ParseResult<char> {
 }
 
 fn parse_interpolation(s: &mut&str) -> ParseResult<GlobPart> {
-    if consume("{", s).is_ok() {
-        let ret = parse_expr(s)?;
+    let arrayref = consume("[]", s).is_ok();
+    let expr = if consume("{", s).is_ok() {
+        let expr = parse_expr(s)?;
         consume("}", s)?;
-        return Ok(GlobPart::GlobPartInterpolation(Box::new(ret)));
+        expr
+    } else {
+        static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[A-Za-z_]+").unwrap());
+        let caps = RE.captures(s).context(s, "Invalid interpolation")?;
+        *s = &s[caps[0].len()..];
+        KlisterExpression::Variable(caps[0].to_string())
+    };
+    if arrayref {
+        return Ok(GlobPart::ArrayInterpolation(Box::new(expr)));
+    } else {
+        return Ok(GlobPart::Interpolation(Box::new(expr)));
     }
-    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[A-Za-z_]+").unwrap());
-    let caps = RE.captures(s).context(s, "Invalid interpolation")?;
-    *s = &s[caps[0].len()..];
-    return Ok(GlobPart::GlobPartInterpolation(Box::new(KlisterExpression::Variable(caps[0].to_string()))));
 }
 
 fn parse_shell_quote(s: &mut&str) -> ParseResult<String> {
@@ -71,15 +80,15 @@ fn parse_glob_part(s: &mut&str) -> ParseResult<Option<GlobPart>> {
         } else if c == '*' {
             if ret.is_empty() {
                 *s = &s[c.len_utf8()..];
-                return Ok(Some(GlobPart::GlobPartAsterisk));
+                return Ok(Some(GlobPart::Asterisk));
             }
-            return Ok(Some(GlobPart::GlobPartS(ret)));
+            return Ok(Some(GlobPart::Str(ret)));
         } else if c == '$' {
             if ret.is_empty() {
                 *s = &s[c.len_utf8()..];
                 return parse_interpolation(s).map(|x| Some(x));
             }
-            return Ok(Some(GlobPart::GlobPartS(ret)));
+            return Ok(Some(GlobPart::Str(ret)));
         } else if c == '"' {
             ret.extend(parse_shell_quote(s));
         } else if c == '\\' {
@@ -93,7 +102,7 @@ fn parse_glob_part(s: &mut&str) -> ParseResult<Option<GlobPart>> {
             *s = &s[c.len_utf8()..];
         }
     }
-    if !ret.is_empty() {return Ok(Some(GlobPart::GlobPartS(ret)));} else {return Ok(None)}
+    if !ret.is_empty() {return Ok(Some(GlobPart::Str(ret)));} else {return Ok(None)}
 }
 
 fn parse_argon(s: &mut&str) -> ParseResult<Option<Argon>> {

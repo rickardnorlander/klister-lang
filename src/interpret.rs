@@ -62,32 +62,49 @@ fn handle_import(context: &mut Context, libname: &str, fname: &str, rettypename:
     Ok(())
 }
 
-fn handle_shell_arg(context: &mut Context, argona: &Argon) -> Result<String, KlisterRTE> {
-    let Argon::ArgonGlob(glob_parts) = argona else {
-        return Err(KlisterRTE::new("Array refs are not supported yet", false));
-    };
+fn handle_shell_arg(context: &mut Context, argona: &Argon, just_one: bool) -> Result<Vec<String>, KlisterRTE> {
+    let Argon::ArgonGlob(glob_parts) = argona;
     let mut out_arg = String::new();
     for part in glob_parts {
         match part {
-            GlobPart::GlobPartS(ref s) => {
+            GlobPart::Str(ref s) => {
                 out_arg.push_str(s);
             }
-            GlobPart::GlobPartInterpolation(ref expr) => {
+            GlobPart::Interpolation(ref expr) => {
                 let val = handle_expression(context, expr)?.str_val()?;
                 out_arg.push_str(&val);
             }
-            GlobPart::GlobPartAsterisk => {
+            GlobPart::Asterisk => {
                 return Err(KlisterRTE::new("Asterisks are not supported yet", false));
+            }
+            GlobPart::ArrayInterpolation(ref expr) => {
+                if just_one {
+                    return Err(KlisterRTE::new("Array interpolation not allowed in this context", false));
+                }
+                if glob_parts.len() != 1 {
+                    return Err(KlisterRTE::new("Array interpolation cannot be affixed", false));
+                }
+                let val = handle_expression(context, expr)?;
+                let xx: &dyn KlisterValueV2 = (*val).as_ref();
+                let arr = xx.as_any().downcast_ref::<KlisterArray>().ok_or_else(|| KlisterRTE::new("Expression was not array", false))?;
+                let mut out_vec = Vec::new();
+                for qq in &arr.val {
+                    let xx: &dyn KlisterValueV2 = (**qq).as_ref();
+                    let kls = xx.as_any().downcast_ref::<KlisterStr>().ok_or_else(|| KlisterRTE::new("Array element was not string", false))?;
+                    out_vec.push(kls.val.clone());
+                }
+                return Ok(out_vec);
             }
         }
     }
-    return Ok(out_arg);
+    let out_vec = vec![out_arg];
+    return Ok(out_vec);
 }
 
 fn handle_shell_args(context: &mut Context, argon: &Vec<Argon>) -> Result<Vec<String>, KlisterRTE> {
     let mut ret = Vec::<String>::new();
     for argona in argon {
-        ret.push(handle_shell_arg(context, argona)?);
+        ret.extend(handle_shell_arg(context, argona, false)?);
     }
     return Ok(ret);
 }
@@ -106,7 +123,11 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<K
             false => std::process::Stdio::inherit(),
         };
         let args = handle_shell_args(context, &cmd.args)?;
-        let command = handle_shell_arg(context, &cmd.command)?;
+        let command = handle_shell_arg(context, &cmd.command, true)?;
+        if command.len() != 1 {
+            return Err(KlisterRTE::new("Command len was not 1", false));
+        }
+        let command = command.first().unwrap();
         let child_res = Command::new(command).args(args).stdin(stdinxxx).stderr(std::process::Stdio::inherit()).stdout(std::process::Stdio::piped()).spawn();
         let Ok(mut child) = child_res else {
             return Ok(KlisterShellRes::SResErr(KlisterRTE::new("Failed to spawn child", true), Vec::new(), None));
