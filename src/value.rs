@@ -88,6 +88,10 @@ pub trait KlisterValueV2: Trace + DynClone + Debug + AsAny {
     fn subscript(&self, _context: &mut Context, _subscript: &ValWrap) -> Result<ValWrap, KlisterRTE>  {
         return Err(KlisterRTE::new("Object is not subscriptable", false));
     }
+
+    fn member_function(&self, _context: &mut Context, name: &str, _arguments: Vec<ValWrap>) -> Result<ValWrap, KlisterRTE> {
+        return Err(KlisterRTE::new(&format!("Type {} has no member function {}", self.get_type_name(), name), false));
+    }
 }
 
 
@@ -298,6 +302,63 @@ impl KlisterValueV2 for KlisterBytes {
             _ => None,
         }
     }
+
+    fn member_function(&self, _context: &mut Context, name: &str, arguments: Vec<ValWrap>) -> Result<ValWrap, KlisterRTE> {
+        match name {
+            "read0_strs" => {
+                if arguments.len() != 0 {
+                    return Err(KlisterRTE::new("Wrong number of arguments", false));
+                }
+                let mut result = Vec::<ValWrap>::new();
+                let mut cur = Vec::<u8>::new();
+                for c in &self.val {
+                    if *c == 0 {
+                        let thestring = match String::from_utf8(cur) {
+                            Ok(s) => s,
+                            Err(_) => {return Err(KlisterRTE::new("Invalid utf8", true));}
+                        };
+                        result.push(valwrap(KlisterStr{val: thestring}));
+                        cur = Vec::<u8>::new()
+                    } else {
+                        cur.push(*c);
+                    }
+                }
+                if !cur.is_empty() {
+                    return Err(KlisterRTE::new("Trailing garbage for read0_str", true));
+                }
+                return Ok(valwrap(KlisterArray{val: result}));
+            }
+            "read0" => {
+                if arguments.len() != 0 {
+                    return Err(KlisterRTE::new("Wrong number of arguments", false));
+                }
+                let mut result = Vec::<ValWrap>::new();
+                let mut cur = Vec::<u8>::new();
+                for c in &self.val {
+                    if *c == 0 {
+                        result.push(valwrap(KlisterBytes{val: cur}));
+                        cur = Vec::<u8>::new()
+                    } else {
+                        cur.push(*c);
+                    }
+                }
+                if !cur.is_empty() {
+                    return Err(KlisterRTE::new("Trailing garbage for read0", true));
+                }
+                return Ok(valwrap(KlisterArray{val: result}));
+            }
+            "parse_string" => {
+                if arguments.len() != 0 {
+                    return Err(KlisterRTE::new("Wrong number of arguments", false));
+                }
+                let Ok(s) = String::from_utf8(self.val.clone()) else {
+                    return Err(KlisterRTE::new("Not valid string", false));
+                };
+                return Ok(valwrap(KlisterStr{val: s}));
+            }
+            _ => {return Err(KlisterRTE::new(&format!("Type {} has no member function {}", self.get_type_name(), name), false));}
+        }
+    }
 }
 
 use num_bigint::BigInt;
@@ -324,6 +385,18 @@ impl KlisterValueV2 for KlisterInteger {
         match subscript {
             "to_string" => Some(KlisterMemberFunction::new(gcself, subscript)),
             _ => None,
+        }
+    }
+
+    fn member_function(&self, _context: &mut Context, name: &str, arguments: Vec<ValWrap>) -> Result<ValWrap, KlisterRTE> {
+        match name {
+            "to_string" => {
+                if arguments.len() != 0 {
+                    return Err(KlisterRTE::new("Wrong number of arguments", false));
+                }
+                return Ok(valwrap(KlisterStr{val: self.val.to_string()}));
+            }
+            _ => {return Err(KlisterRTE::new(&format!("Type {} has no member function {}", self.get_type_name(), name), false));}
         }
     }
 
@@ -372,77 +445,8 @@ pub struct KlisterMemberFunction {
 }
 
 impl KlisterValueV2 for KlisterMemberFunction {
-    fn call(&self, _context: &mut Context, arguments: Vec<ValWrap>) -> Result<ValWrap, KlisterRTE> {
-        // Todo: this architecture is kind of awful but I haven't figured out how to do it better yet.
-        // Probably something like having a member Fn(x, y) -> z
-        let xx: &dyn KlisterValueV2 = (*self.obj).as_ref();
-        if let Some(ref x) = xx.as_any().downcast_ref::<KlisterInteger>() {
-            match self.name.as_str() {
-                "to_string" => {
-                    if arguments.len() != 0 {
-                        return Err(KlisterRTE::new("Wrong number of arguments", false));
-                    }
-                    return Ok(valwrap(KlisterStr{val:x.val.to_string()}));
-                }
-                _ => {}
-            }
-        } else if let Some(ref x) = xx.as_any().downcast_ref::<KlisterBytes>() {
-            match self.name.as_str() {
-                "read0_strs" => {
-                    if arguments.len() != 0 {
-                        return Err(KlisterRTE::new("Wrong number of arguments", false));
-                    }
-                    let mut result = Vec::<ValWrap>::new();
-                    let mut cur = Vec::<u8>::new();
-                    for c in &x.val {
-                        if *c == 0 {
-                            let thestring = match String::from_utf8(cur) {
-                                Ok(s) => s,
-                                Err(_) => {return Err(KlisterRTE::new("Invalid utf8", true));}
-                            };
-                            result.push(valwrap(KlisterStr{val: thestring}));
-                            cur = Vec::<u8>::new()
-                        } else {
-                            cur.push(*c);
-                        }
-                    }
-                    if !cur.is_empty() {
-                        return Err(KlisterRTE::new("Trailing garbage for read0_str", true));
-                    }
-                    return Ok(valwrap(KlisterArray{val: result}));
-                }
-                "read0" => {
-                    if arguments.len() != 0 {
-                        return Err(KlisterRTE::new("Wrong number of arguments", false));
-                    }
-                    let mut result = Vec::<ValWrap>::new();
-                    let mut cur = Vec::<u8>::new();
-                    for c in &x.val {
-                        if *c == 0 {
-                            result.push(valwrap(KlisterBytes{val: cur}));
-                            cur = Vec::<u8>::new()
-                        } else {
-                            cur.push(*c);
-                        }
-                    }
-                    if !cur.is_empty() {
-                        return Err(KlisterRTE::new("Trailing garbage for read0", true));
-                    }
-                    return Ok(valwrap(KlisterArray{val: result}));
-                }
-                "parse_string" => {
-                    if arguments.len() != 0 {
-                        return Err(KlisterRTE::new("Wrong number of arguments", false));
-                    }
-                    let Ok(s) = String::from_utf8(x.val.clone()) else {
-                        return Err(KlisterRTE::new("Not valid string", false));
-                    };
-                    return Ok(valwrap(KlisterStr{val: s}));
-                }
-                _ => {}
-            }
-        }
-        return Err(KlisterRTE::new(&format!("Type {} has no member function {}", self.obj.get_type_name(), self.name), false));
+    fn call(&self, context: &mut Context, arguments: Vec<ValWrap>) -> Result<ValWrap, KlisterRTE> {
+        return self.obj.member_function(context, &self.name, arguments);
     }
 }
 
