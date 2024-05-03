@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::env;
+use std::ffi::OsString;
 use std::io::Write;
 use std::process::Command;
 
@@ -62,17 +63,17 @@ fn handle_import(context: &mut Context, libname: &str, fname: &str, rettypename:
     Ok(())
 }
 
-fn handle_shell_arg(context: &mut Context, argona: &Argon, just_one: bool) -> Result<Vec<String>, KlisterRTE> {
+fn handle_shell_arg(context: &mut Context, argona: &Argon, just_one: bool) -> Result<Vec<OsString>, KlisterRTE> {
     let Argon::ArgonGlob(glob_parts) = argona;
-    let mut out_arg = String::new();
+    let mut out_arg = OsString::new();
     for part in glob_parts {
         match part {
             GlobPart::Str(ref s) => {
-                out_arg.push_str(s);
+                out_arg.push(s);
             }
             GlobPart::Interpolation(ref expr) => {
-                let val = handle_expression(context, expr)?.str_val()?;
-                out_arg.push_str(&val);
+                let val = handle_expression(context, expr)?.interpolate()?;
+                out_arg.push(&val);
             }
             GlobPart::Asterisk => {
                 return Err(KlisterRTE::new("Asterisks are not supported yet", false));
@@ -89,9 +90,7 @@ fn handle_shell_arg(context: &mut Context, argona: &Argon, just_one: bool) -> Re
                 let arr = xx.as_any().downcast_ref::<KlisterArray>().ok_or_else(|| KlisterRTE::new("Expression was not array", false))?;
                 let mut out_vec = Vec::new();
                 for qq in &arr.val {
-                    let xx: &dyn KlisterValueV2 = (**qq).as_ref();
-                    let kls = xx.as_any().downcast_ref::<KlisterStr>().ok_or_else(|| KlisterRTE::new("Array element was not string", false))?;
-                    out_vec.push(kls.val.clone());
+                    out_vec.push(qq.interpolate()?);
                 }
                 return Ok(out_vec);
             }
@@ -101,8 +100,8 @@ fn handle_shell_arg(context: &mut Context, argona: &Argon, just_one: bool) -> Re
     return Ok(out_vec);
 }
 
-fn handle_shell_args(context: &mut Context, argon: &Vec<Argon>) -> Result<Vec<String>, KlisterRTE> {
-    let mut ret = Vec::<String>::new();
+fn handle_shell_args(context: &mut Context, argon: &Vec<Argon>) -> Result<Vec<OsString>, KlisterRTE> {
+    let mut ret = Vec::<OsString>::new();
     for argona in argon {
         ret.extend(handle_shell_arg(context, argona, false)?);
     }

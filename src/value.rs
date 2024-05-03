@@ -2,7 +2,9 @@
 #![allow(unused_imports)]
 
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::fmt::Debug;
+use std::os::unix::ffi::OsStringExt;
 
 use as_any::{AsAny, Downcast};
 use dyn_clone::DynClone;
@@ -71,6 +73,10 @@ pub trait KlisterValueV2: Trace + DynClone + Debug + AsAny {
 
     fn str_val(&self) -> Result<String, KlisterRTE>  {
         return Err(KlisterRTE::new("Not string", false));
+    }
+
+    fn interpolate(&self) -> Result<OsString, KlisterRTE>  {
+        return Err(KlisterRTE::new("Object cannot be interpolated", false));
     }
 
     fn bin_op_forward(&self, _op: Operation, _other: &dyn KlisterValueV2) -> Oppi<ValWrap, KlisterRTE> {
@@ -267,6 +273,10 @@ impl KlisterValueV2 for KlisterStr {
         return Ok(self.val.clone());
     }
 
+    fn interpolate(&self) -> Result<OsString, KlisterRTE>  {
+        return Ok(self.val.clone().into());
+    }
+
     fn subscript(&self, _context: &mut Context, subscript: &ValWrap) -> Result<ValWrap, KlisterRTE>  {
         let xx: &dyn KlisterValueV2 = (**subscript).as_ref();
         let Some(index) = xx.as_any().downcast_ref::<KlisterInteger>() else {
@@ -301,6 +311,15 @@ impl KlisterValueV2 for KlisterBytes {
             "parse_string" => Some(KlisterMemberFunction::new(gcself, subscript)),
             _ => None,
         }
+    }
+
+    fn interpolate(&self) -> Result<OsString, KlisterRTE>  {
+        for v in &self.val {
+            if *v == 0 {
+                return Err(KlisterRTE::new("Cannot interpolate due to nul byte", true));
+            }
+        }
+        return Ok(OsString::from_vec(self.val.clone()));
     }
 
     fn member_function(&self, _context: &mut Context, name: &str, arguments: Vec<ValWrap>) -> Result<ValWrap, KlisterRTE> {
@@ -381,6 +400,10 @@ impl KlisterInteger {
 }
 
 impl KlisterValueV2 for KlisterInteger {
+    fn interpolate(&self) -> Result<OsString, KlisterRTE>  {
+        return Ok(self.val.to_string().into());
+    }
+
     fn dot_impl(&self, gcself: &ValWrap, subscript: &str) -> Option<ValWrap> {
         match subscript {
             "to_string" => Some(KlisterMemberFunction::new(gcself, subscript)),

@@ -5,6 +5,7 @@ use std::ffi::c_int;
 use std::ffi::c_long;
 use std::ffi::CString;
 use std::ffi::CStr;
+use std::iter::zip;
 
 use libffi::low;
 use libffi::middle::arg;
@@ -14,7 +15,9 @@ use libffi::middle::Type;
 use num_bigint::BigInt;
 
 use crate::except::KlisterRTE;
+use crate::types::Mutability;
 use crate::types::TypeTag;
+use crate::types::OwnershipTag;
 use crate::value::KlisterBytes;
 use crate::value::KlisterInteger;
 use crate::value::KlisterValueV2;
@@ -109,10 +112,6 @@ impl Libraries {
         Ok(())
     }
 }
-
-use std::iter::zip;
-use crate::types::OwnershipTag;
-use crate::types::Mutability;
 
 pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dyn KlisterValueV2>>) -> Result<ValWrap, KlisterRTE> {
     let mut args = Vec::<Arg>::new();
