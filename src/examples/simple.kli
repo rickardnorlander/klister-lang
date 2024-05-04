@@ -36,7 +36,7 @@ if (might_fail.is_ok) {
     write(1, was_fine, was_fine.len)
 }
 
-`echo err 1>&2`
+`cat <<<err$asdf 1>&2`
 
 b=`echo hello world | tr a-z A-Z|tail -c 6`
 puts(writebytes(b))

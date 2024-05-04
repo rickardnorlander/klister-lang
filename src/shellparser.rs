@@ -5,6 +5,7 @@ use crate::ast::GlobPart;
 use crate::ast::KlisterExpression;
 use crate::ast::ShellCommand;
 use crate::ast::ShellPipelineS;
+use crate::ast::Stdinput;
 use crate::parse::consume;
 use crate::parse::parse_expr;
 use crate::parse::ParseResult;
@@ -110,11 +111,11 @@ fn parse_glob_part(s: &mut&str) -> ParseResult<Option<GlobPart>> {
 #[derive(Debug)]
 pub enum Neon {
     Argon(Vec<GlobPart>),
+    RedirectStdin(Stdinput),
+    RedirectStdout(Vec<GlobPart>),
+    RedirectStderr(Vec<GlobPart>),
     RedirectStdoutToStderr,
     RedirectStderrToStdout,
-    RedirectStdout(Vec<GlobPart>),
-    RedirectStdin(Vec<GlobPart>),
-    RedirectStderr(Vec<GlobPart>),
 }
 
 fn parse_redirect(s: &mut &str, ind: i32) -> ParseResult<Neon> {
@@ -133,7 +134,7 @@ fn parse_redirect(s: &mut &str, ind: i32) -> ParseResult<Neon> {
     }
     if !ret.is_empty() {
         match ind {
-            0 => Ok(Neon::RedirectStdin(ret)),
+            0 => Ok(Neon::RedirectStdin(Stdinput::File(ret))),
             1 => Ok(Neon::RedirectStdout(ret)),
             2 => Ok(Neon::RedirectStderr(ret)),
             _ => panic!("Internal interpreter error"),
@@ -141,6 +142,17 @@ fn parse_redirect(s: &mut &str, ind: i32) -> ParseResult<Neon> {
     } else {
         synerr!(s, "Incomplete redirect");
     }
+}
+
+
+fn parse_herestring(s: &mut &str) -> ParseResult<Neon> {
+    skip_shell_separators(s);
+
+    let mut ret = Vec::<GlobPart>::new();
+    while let Some(glob_part) = parse_glob_part(s)? {
+        ret.push(glob_part);
+    }
+    Ok(Neon::RedirectStdin(Stdinput::Heredoc(ret)))
 }
 
 fn parse_neon(s: &mut&str) -> ParseResult<Option<Neon>> {
@@ -155,6 +167,9 @@ fn parse_neon(s: &mut&str) -> ParseResult<Option<Neon>> {
     }
     if consume("2>", s).is_ok() {
         return parse_redirect(s, 2).map(|x| Some(x));
+    }
+    if consume("<<<", s).is_ok() {
+        return parse_herestring(s).map(|x| Some(x));
     }
     if consume("<", s).is_ok() {
         return parse_redirect(s, 0).map(|x| Some(x));
@@ -199,7 +214,7 @@ fn build_invocation(s: &&str, shell_tokens: Vec<Neon>) -> ParseResult<ShellComma
     let mut cmd: Option<Vec<GlobPart>> = None;
     let mut args: Vec<Vec<GlobPart>> = Vec::new();
 
-    let mut infile = None;
+    let mut input = Stdinput::Default;
     let mut outfile = None;
     let mut errfile = None;
 
@@ -228,7 +243,7 @@ fn build_invocation(s: &&str, shell_tokens: Vec<Neon>) -> ParseResult<ShellComma
                 errtoout = true
             }
             Neon::RedirectStdin(v) => {
-                infile = Some(v);
+                input = v;
             }
             Neon::RedirectStdout(v) => {
                 if outtoerr || errtoout {
@@ -264,7 +279,7 @@ fn build_invocation(s: &&str, shell_tokens: Vec<Neon>) -> ParseResult<ShellComma
     let Some(cmd) = cmd else {
         synerr!(s, "No cmd in invocation")
     };
-    return Ok(ShellCommand{command: cmd, args, stdin: infile, outerr});
+    return Ok(ShellCommand{command: cmd, args, stdin: input, outerr});
 }
 
 fn parse_shell_invocation(s: &mut&str) -> ParseResult<ShellCommand> {

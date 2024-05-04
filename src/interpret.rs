@@ -61,16 +61,16 @@ fn handle_import(context: &mut Context, libname: &str, fname: &str, rettypename:
     Ok(())
 }
 
-fn handle_shell_arg(context: &mut Context, glob_parts: &Vec<GlobPart>, just_one: bool) -> Result<Vec<OsString>, KlisterRTE> {
-    let mut out_arg = OsString::new();
+fn handle_shell_arg(context: &mut Context, glob_parts: &Vec<GlobPart>, just_one: bool) -> Result<Vec<Vec<u8>>, KlisterRTE> {
+    let mut out_arg = Vec::<u8>::new();
     for part in glob_parts {
         match part {
             GlobPart::Str(ref s) => {
-                out_arg.push(s);
+                out_arg.extend(s.as_bytes());
             }
             GlobPart::Interpolation(ref expr) => {
                 let val = handle_expression(context, expr)?.interpolate()?;
-                out_arg.push(&val);
+                out_arg.extend(&val);
             }
             GlobPart::Asterisk => {
                 return Err(KlisterRTE::new("Asterisks are not supported yet", false));
@@ -97,18 +97,39 @@ fn handle_shell_arg(context: &mut Context, glob_parts: &Vec<GlobPart>, just_one:
     return Ok(out_vec);
 }
 
-fn handle_just_one(context: &mut Context, glob_parts: &Vec<GlobPart>, just_one: bool) -> Result<OsString, KlisterRTE> {
-    let ret = handle_shell_arg(context, glob_parts, just_one)?;
+fn handle_just_one(context: &mut Context, glob_parts: &Vec<GlobPart>) -> Result<OsString, KlisterRTE> {
+    let ret = handle_shell_arg(context, glob_parts, true)?;
+    if ret.len() != 1 {
+        return Err(KlisterRTE::new("Invalid expansion", false)); 
+    }
+    return Ok(verified_osstring_from_vec(ret.into_iter().next().unwrap())?)
+}
+
+fn handle_just_two(context: &mut Context, glob_parts: &Vec<GlobPart>) -> Result<Vec<u8>, KlisterRTE> {
+    let ret = handle_shell_arg(context, glob_parts, true)?;
     if ret.len() != 1 {
         return Err(KlisterRTE::new("Invalid expansion", false)); 
     }
     return Ok(ret.into_iter().next().unwrap())
 }
 
+use std::os::unix::ffi::OsStringExt;
+
+fn verified_osstring_from_vec(v: Vec<u8>) -> Result<OsString, KlisterRTE> {
+    for b in &v {
+        if *b == 0 {
+            return Err(KlisterRTE::new("Embedded nul", true)); 
+        }
+    }
+    return Ok(OsString::from_vec(v));
+}
+
 fn handle_shell_args(context: &mut Context, argon: &Vec<Vec<GlobPart>>) -> Result<Vec<OsString>, KlisterRTE> {
     let mut ret = Vec::<OsString>::new();
     for argona in argon {
-        ret.extend(handle_shell_arg(context, argona, false)?);
+        for x in handle_shell_arg(context, argona, false)? {
+            ret.push(verified_osstring_from_vec(x)?);
+        }
     }
     return Ok(ret);
 }
@@ -126,11 +147,7 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<K
 
     for cmd in cmds.into_iter() {
         let args = handle_shell_args(context, &cmd.args)?;
-        let command = handle_shell_arg(context, &cmd.command, true)?;
-        if command.len() != 1 {
-            return Err(KlisterRTE::new("Command len was not 1", false));
-        }
-        let command = command.first().unwrap();
+        let command = handle_just_one(context, &cmd.command)?;
 
         let mut ductcmd = duct::cmd(command, args);
 
@@ -138,21 +155,27 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<K
 
         match output_opt {
             Some(bytes) => {
-                if cmd.stdin.is_some() {
+                if !matches!(cmd.stdin, Stdinput::Default) {
                     return Err(KlisterRTE::new("Invalid stdin redirect", false));
                 }
                 ductcmd = ductcmd.stdin_bytes(bytes);
             }
-            None => {}
+            None => {
+                match cmd.stdin {
+                    Stdinput::Default => {}
+                    Stdinput::File(ref f) => {ductcmd = ductcmd.stdin_path(handle_just_one(context, f)?);}
+                    Stdinput::Heredoc(ref f) => {ductcmd = ductcmd.stdin_bytes(handle_just_two(context, f)?);}
+                }
+            }
         };
         match &cmd.outerr {
             OutErr::NoMerge(o_opt, e_opt) => {
                 if let Some(ref o) = o_opt {
                     if go_through {return Err(KlisterRTE::new("Invalid stdout redirect", false));}
-                    ductcmd = ductcmd.stdout_path(handle_just_one(context, o, true)?);
+                    ductcmd = ductcmd.stdout_path(handle_just_one(context, o)?);
                 }
                 if let Some(ref e) = e_opt {
-                    ductcmd = ductcmd.stderr_path(handle_just_one(context, e, true)?);
+                    ductcmd = ductcmd.stderr_path(handle_just_one(context, e)?);
                 }
             }
             OutErr::MergedToStderr => {
@@ -162,7 +185,7 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<K
             OutErr::MergedToStdout => {ductcmd = ductcmd.stderr_to_stdout()}
             OutErr::MergedToFile(ref o) => {
                 if go_through {return Err(KlisterRTE::new("Invalid stdout redirect", false));}
-                ductcmd = ductcmd.stderr_to_stdout().stdout_path(handle_just_one(context, o, true)?);
+                ductcmd = ductcmd.stderr_to_stdout().stdout_path(handle_just_one(context, o)?);
             }
         };
         if !go_through {

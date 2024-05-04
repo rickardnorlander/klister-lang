@@ -22,7 +22,15 @@ pub enum OutErr {
 
 #[derive(Clone)]
 #[derive(Debug)]
-pub struct ShellCommand{pub command: Vec<GlobPart>, pub args: Vec<Vec<GlobPart>>, pub stdin: Option<Vec<GlobPart>>, pub outerr: OutErr}
+pub enum Stdinput {
+    Default,
+    Heredoc(Vec<GlobPart>),  // Or here-string but they are evaluated the same.
+    File(Vec<GlobPart>),
+}
+
+#[derive(Clone)]
+#[derive(Debug)]
+pub struct ShellCommand{pub command: Vec<GlobPart>, pub args: Vec<Vec<GlobPart>>, pub stdin: Stdinput, pub outerr: OutErr}
 
 #[derive(Clone)]
 #[derive(Debug)]
