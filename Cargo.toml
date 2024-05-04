@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 as-any = "0.3.1"
+duct = "0.13.7"
 dyn-clone = "1.0.17"
 gc = { version = "0.5", features = ["derive"] }
 libffi = "3.2.0"

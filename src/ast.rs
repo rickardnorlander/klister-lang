@@ -13,14 +13,16 @@ pub enum GlobPart {
 
 #[derive(Clone)]
 #[derive(Debug)]
-pub enum Argon {
-    ArgonGlob(Vec<GlobPart>),
+pub enum OutErr {
+    NoMerge(Option<Vec<GlobPart>>, Option<Vec<GlobPart>>), // Out, Err
+    MergedToFile(Vec<GlobPart>),
+    MergedToStdout,
+    MergedToStderr,
 }
 
 #[derive(Clone)]
 #[derive(Debug)]
-pub struct ShellCommand{pub command: Argon, pub args: Vec<Argon>}
-//pub struct ShellCommand{pub command: Argon, pub args: Vec<Argon>, pub stdin: Option<String>, pub stdout: Option<String>, pub stderr: Option<String>, pub stderr_merge_into_stdout: bool, pub stdout_merge_into_stderr: bool}
+pub struct ShellCommand{pub command: Vec<GlobPart>, pub args: Vec<Vec<GlobPart>>, pub stdin: Option<Vec<GlobPart>>, pub outerr: OutErr}
 
 #[derive(Clone)]
 #[derive(Debug)]

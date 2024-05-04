@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
-use std::io::Write;
-use std::process::Command;
 
 use gc::Gc;
 
@@ -63,8 +61,7 @@ fn handle_import(context: &mut Context, libname: &str, fname: &str, rettypename:
     Ok(())
 }
 
-fn handle_shell_arg(context: &mut Context, argona: &Argon, just_one: bool) -> Result<Vec<OsString>, KlisterRTE> {
-    let Argon::ArgonGlob(glob_parts) = argona;
+fn handle_shell_arg(context: &mut Context, glob_parts: &Vec<GlobPart>, just_one: bool) -> Result<Vec<OsString>, KlisterRTE> {
     let mut out_arg = OsString::new();
     for part in glob_parts {
         match part {
@@ -100,7 +97,15 @@ fn handle_shell_arg(context: &mut Context, argona: &Argon, just_one: bool) -> Re
     return Ok(out_vec);
 }
 
-fn handle_shell_args(context: &mut Context, argon: &Vec<Argon>) -> Result<Vec<OsString>, KlisterRTE> {
+fn handle_just_one(context: &mut Context, glob_parts: &Vec<GlobPart>, just_one: bool) -> Result<OsString, KlisterRTE> {
+    let ret = handle_shell_arg(context, glob_parts, just_one)?;
+    if ret.len() != 1 {
+        return Err(KlisterRTE::new("Invalid expansion", false)); 
+    }
+    return Ok(ret.into_iter().next().unwrap())
+}
+
+fn handle_shell_args(context: &mut Context, argon: &Vec<Vec<GlobPart>>) -> Result<Vec<OsString>, KlisterRTE> {
     let mut ret = Vec::<OsString>::new();
     for argona in argon {
         ret.extend(handle_shell_arg(context, argona, false)?);
@@ -120,10 +125,6 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<K
     let cmdlen = cmds.len();
 
     for cmd in cmds.into_iter() {
-        let stdinxxx = match output_opt.is_some() {
-            true => std::process::Stdio::piped(),
-            false => std::process::Stdio::inherit(),
-        };
         let args = handle_shell_args(context, &cmd.args)?;
         let command = handle_shell_arg(context, &cmd.command, true)?;
         if command.len() != 1 {
@@ -131,49 +132,54 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<K
         }
         let command = command.first().unwrap();
 
+        let mut ductcmd = duct::cmd(command, args);
+
         let go_through = i == cmdlen-1 && sp.is_write;
 
-        let stdoutxxx = if go_through {std::process::Stdio::inherit()} else {std::process::Stdio::piped()};
-        let child_res = Command::new(command).args(args).stdin(stdinxxx).stderr(std::process::Stdio::inherit()).stdout(stdoutxxx).spawn();
-        let Ok(mut child) = child_res else {
-            return Ok(KlisterShellRes::SResErr(KlisterRTE::new("Failed to spawn child", true), Vec::new(), None));
+        match output_opt {
+            Some(bytes) => {
+                if cmd.stdin.is_some() {
+                    return Err(KlisterRTE::new("Invalid stdin redirect", false));
+                }
+                ductcmd = ductcmd.stdin_bytes(bytes);
+            }
+            None => {}
         };
-        let mut write_ok = true;
-
-        let scope_result = std::thread::scope(|my_thread_scope| {
-            if let Some(output) = output_opt {
-                let Some(mut stdin) = child.stdin.take() else {
-                    return KlisterShellRes::SResErr(KlisterRTE::new("Failed to open stdin", true), Vec::new(), None);
-                };
-                {
-                    let write_ok = &mut write_ok;
-                    my_thread_scope.spawn(move || {
-                        if stdin.write_all(&output).is_err() {
-                            *write_ok = false;
-                        }
-                    });
+        match &cmd.outerr {
+            OutErr::NoMerge(o_opt, e_opt) => {
+                if let Some(ref o) = o_opt {
+                    if go_through {return Err(KlisterRTE::new("Invalid stdout redirect", false));}
+                    ductcmd = ductcmd.stdout_path(handle_just_one(context, o, true)?);
+                }
+                if let Some(ref e) = e_opt {
+                    ductcmd = ductcmd.stderr_path(handle_just_one(context, e, true)?);
                 }
             }
-    
-            let Ok(output) = child.wait_with_output() else {
-                return KlisterShellRes::SResErr(KlisterRTE::new("Failed to read stdout", true), Vec::new(), None);
-            };
-            if !output.status.success() {
-                return KlisterShellRes::SResErr(KlisterRTE::new("Shell command failed", true), output.stdout, output.status.code());
+            OutErr::MergedToStderr => {
+                if go_through {return Err(KlisterRTE::new("Invalid stdout redirect", false));}
+                ductcmd = ductcmd.stdout_to_stderr()
             }
-            return KlisterShellRes::SResOk(output.stdout);
-        });
+            OutErr::MergedToStdout => {ductcmd = ductcmd.stderr_to_stdout()}
+            OutErr::MergedToFile(ref o) => {
+                if go_through {return Err(KlisterRTE::new("Invalid stdout redirect", false));}
+                ductcmd = ductcmd.stderr_to_stdout().stdout_path(handle_just_one(context, o, true)?);
+            }
+        };
+        if !go_through {
+            ductcmd = ductcmd.stdout_capture();
+        }
+        let child_res = ductcmd.unchecked().run();
+        let Ok(child_res) = child_res else {
+            return Ok(KlisterShellRes::SResErr(KlisterRTE::new("Failed to run command", true), Vec::new(), None));
+        };
 
-        if !write_ok {
-            return Ok(KlisterShellRes::SResErr(KlisterRTE::new("Failed to write to stdin", true), Vec::new(), None));
+        if !child_res.status.success() {
+            return Ok(KlisterShellRes::SResErr(KlisterRTE::new("Shell command failed", true), child_res.stdout, child_res.status.code()));
         }
 
-        let KlisterShellRes::SResOk(ref v) = scope_result else {
-            return Ok(scope_result);
-        };
         // todo: Unnecessary clones here, clean this up.
         i+=1;
-        output_opt = Some(v.clone())
+        output_opt = Some(child_res.stdout.clone())
     }
     let output = output_opt.expect("Internal interpreter error: Output was none");
     Ok(KlisterShellRes::SResOk(output))

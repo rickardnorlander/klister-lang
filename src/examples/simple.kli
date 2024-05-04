@@ -15,7 +15,7 @@ for (arg in argv) {
     puts(arg)
 }
 
-w`echo $[]argv`
+w`echo $[]{argv}`
 
 puts(env["HOME"])
 
@@ -36,6 +36,7 @@ if (might_fail.is_ok) {
     write(1, was_fine, was_fine.len)
 }
 
+`echo err 1>&2`
 
 b=`echo hello world | tr a-z A-Z|tail -c 6`
 puts(writebytes(b))
