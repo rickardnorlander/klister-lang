@@ -125,6 +125,11 @@ fn parse_precedence_6(s: &mut& str) -> ParseResult<KlisterExpression> {
         return parse_catch_expr(s);
     }
 
+    static ARRAY_LITERAL: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\[").unwrap());
+    if ARRAY_LITERAL.is_match(s) {
+        return parse_array(s);
+    }
+
     static PAREN: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\(").unwrap());
     if PAREN.is_match(s) {
         consume("(", s)?;
@@ -138,6 +143,26 @@ fn parse_precedence_6(s: &mut& str) -> ParseResult<KlisterExpression> {
         return Ok(KlisterExpression::Variable(id));
     }
     synerr!(s, format!("Parse precedence 6 failed at {}", s));
+}
+
+fn parse_array(remaining: &mut& str) -> ParseResult<KlisterExpression> {
+    let mut args = Vec::<KlisterExpression>::new();
+    skip_space(remaining);
+    consume("[", remaining)?;
+    let arg0_r = parse_expr(remaining);
+    if let Ok(arg0) = arg0_r {
+        args.push(arg0);
+        loop {
+            skip_space(remaining);
+            if consume(",", remaining).is_err() {
+                break;
+            }
+            args.push(parse_expr(remaining)?);
+        }
+    }
+    skip_space(remaining);
+    consume("]", remaining)?;
+    return Ok(KlisterExpression::Array(args));
 }
 
 fn parse_id(remaining: &mut& str) -> ParseResult<String> {

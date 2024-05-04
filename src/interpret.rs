@@ -210,6 +210,10 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<K
 
 fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> Result<ValWrap, KlisterRTE> {
     match expression {
+        KlisterExpression::Array(arr) => {
+            let argument_values: Vec<ValWrap> = arr.iter().map(|x| handle_expression(context, x)).collect::<Result<Vec<ValWrap>, KlisterRTE>>()?;
+            return Ok(valwrap(KlisterArray{val: argument_values}))
+        }
         KlisterExpression::Call(fn_expr, arguments) => {
             let argument_values: Vec<ValWrap> = arguments.iter().map(|x| handle_expression(context, x)).collect::<Result<Vec<ValWrap>, KlisterRTE>>()?;
             let v = handle_expression(context, fn_expr)?;

@@ -67,6 +67,7 @@ pub enum Operation {
 #[derive(Clone)]
 #[derive(Debug)]
 pub enum KlisterExpression {
+    Array(Vec<KlisterExpression>),
     Call(Box<KlisterExpression>, Vec<KlisterExpression>),
     Index(Box<KlisterExpression>, Box<KlisterExpression>),
     Dot(Box<KlisterExpression>, String),
