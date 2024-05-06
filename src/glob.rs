@@ -39,18 +39,25 @@ pub fn globwalk(pattern: OsString) -> Result<Vec<OsString>, KlisterRTE> {
     pattern_u8.push(0);
     let pattern_cstring = CString::from_vec_with_nul(pattern_u8).or_else(|_| Err(KlisterRTE::new("Internal nul", true)))?;
     let mut ret = Vec::new();
+    let is_ok;
     unsafe {
         let mut theglob = glob_t{gl_pathc: 0, gl_pathv: ptr::null_mut(), gl_offsL: 0};
         let flags = GLOB_ERR | GLOB_BRACE | GLOB_NOMAGIC | GLOB_TILDE_CHECK;
-        glob(pattern_cstring.as_ptr(), flags, ptr::null(), &mut theglob as *mut glob_t);
-        ret.reserve(theglob.gl_pathc);
-        for i in 0..theglob.gl_pathc {
-            let raw_cstr = *theglob.gl_pathv.offset(i.try_into().unwrap());
-            let cstr = CStr::from_ptr(raw_cstr);
-            let osstr = OsStr::from_bytes(cstr.to_bytes());
-            ret.push(osstr.to_os_string());
+        is_ok = 0 == glob(pattern_cstring.as_ptr(), flags, ptr::null(), &mut theglob as *mut glob_t);
+        if is_ok {
+            ret.reserve(theglob.gl_pathc);
+            for i in 0..theglob.gl_pathc {
+                let raw_cstr = *theglob.gl_pathv.offset(i.try_into().unwrap());
+                let cstr = CStr::from_ptr(raw_cstr);
+                let osstr = OsStr::from_bytes(cstr.to_bytes());
+                ret.push(osstr.to_os_string());
+            }
         }
         globfree(&mut theglob);
     }
-    return Ok(ret);
+    return if is_ok {
+        Ok(ret)
+    } else {
+        Err(KlisterRTE::new("Glob failed", true))
+    }
 }
