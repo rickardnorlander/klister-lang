@@ -3,6 +3,7 @@ use std::env;
 use std::ffi::OsString;
 
 use gc::Gc;
+use gc::GcCell;
 
 use crate::ast::*;
 use crate::ccall::Libraries;
@@ -100,7 +101,7 @@ fn handle_shell_arg(context: &mut Context, glob_parts: &Vec<GlobPart>, just_one:
                 out_arg.extend(s.as_bytes());
             }
             GlobPart::Interpolation(ref expr) => {
-                let val = ask!(ask2!(handle_expression(context, expr)).interpolate());
+                let val = ask!(ask2!(handle_expression(context, expr)).borrow().interpolate());
                 out_arg.extend(&val);
             }
             GlobPart::Asterisk => {
@@ -114,11 +115,12 @@ fn handle_shell_arg(context: &mut Context, glob_parts: &Vec<GlobPart>, just_one:
                     return ExpE::Err(KlisterRTE::new("Array interpolation cannot be affixed", false));
                 }
                 let val = ask2!(handle_expression(context, expr));
-                let xx: &dyn KlisterValueV2 = (*val).as_ref();
+                let borrower = val.borrow();
+                let xx: &dyn KlisterValueV2 = borrower.as_ref();
                 let arr = ask!(xx.as_any().downcast_ref::<KlisterArray>().ok_or_else(|| KlisterRTE::new("Expression was not array", false)));
                 let mut out_vec = Vec::new();
                 for qq in &arr.val {
-                    out_vec.push(ask!(qq.interpolate()));
+                    out_vec.push(ask!(qq.borrow().interpolate()));
                 }
                 return ExpE::Ok(out_vec);
             }
@@ -255,18 +257,22 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> E
                 argument_values.push(ask2!(handle_expression(context, x)));
             }
             let v = ask2!(handle_expression(context, fn_expr));
-            return ExpE::Ok(ask!(v.call(context, argument_values)))
+            let res = {
+                let borrower = v.borrow();
+                borrower.call(context, argument_values)
+            };
+            return ExpE::Ok(ask!(res))
         }
         KlisterExpression::Index(arr, index) => {
             let lv = ask2!(handle_expression(context, arr));
             let rv = ask2!(handle_expression(context, index));
-            return ExpE::Ok(ask!(lv.subscript(context, &rv)));
+            return ExpE::Ok(ask!(lv.borrow().subscript(context, &rv)));
         }
         KlisterExpression::Dot(obj_expr, subscript) => {
             let obj = ask2!(handle_expression(context, obj_expr));
-            return ExpE::Ok(ask!(obj.dot(&obj, subscript)));
+            return ExpE::Ok(ask!(obj.borrow().dot(&obj, subscript)));
         }
-        KlisterExpression::Literal(v) => {ExpE::Ok(Gc::new(v.clone()))}
+        KlisterExpression::Literal(v) => {ExpE::Ok(Gc::new(GcCell::new(v.clone())))}
         KlisterExpression::Variable(v) => {
             match context.get_var(v) {
                 Some(val) => ExpE::Ok(val.clone()),
@@ -275,10 +281,10 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> E
         }
         KlisterExpression::BinOp(op, left, right) => {
             let lv = ask2!(handle_expression(context, left));
-            if matches!(op, Operation::Or) && ask!(lv.bool_val()) == true {
+            if matches!(op, Operation::Or) && ask!(lv.borrow().bool_val()) == true {
                 return ExpE::Ok(valwrap(KlisterBool{val: true}))
             }
-            if matches!(op, Operation::And) && ask!(lv.bool_val()) == false {
+            if matches!(op, Operation::And) && ask!(lv.borrow().bool_val()) == false {
                 return ExpE::Ok(valwrap(KlisterBool{val: false}))
             }
             let rv = ask2!(handle_expression(context, right));
@@ -286,7 +292,11 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> E
         }
         KlisterExpression::Not(expr) => {
             let v = ask2!(handle_expression(context, expr));
-            ExpE::Ok(ask!(v.un_op("!")))
+            let res = {
+                let borrower = v.borrow();
+                borrower.un_op("!")
+            };
+            ExpE::Ok(ask!(res))
         }
         KlisterExpression::CatchExpr(expr) => {
             let v_res = handle_expression(context, expr);
@@ -376,7 +386,7 @@ pub fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> 
         }
         KlisterStatement::While(condition, block) => {
             loop {
-                let cond_val = ask!(ask2!(handle_expression(context, &condition)).bool_val());
+                let cond_val = ask!(ask2!(handle_expression(context, &condition)).borrow().bool_val());
                 if !cond_val {
                     break;
                 }
@@ -385,7 +395,7 @@ pub fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> 
             ExpE::Ok(())
         }
         KlisterStatement::If(condition, ifblock, elseblock_opt) => {
-            let cond_val = ask!(ask2!(handle_expression(context, &condition)).bool_val());
+            let cond_val = ask!(ask2!(handle_expression(context, &condition)).borrow().bool_val());
             if cond_val {
                 return handle_statement(context, ifblock);
             } else if let Some(elseblock) = elseblock_opt {
@@ -395,11 +405,14 @@ pub fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> 
         }
         KlisterStatement::ForEach(varname, expr, block) => {
             let arraylike = ask2!(handle_expression(context, &expr));
-            let len = ask!(arraylike.dot(&arraylike, "len"));
-            let xx: &dyn KlisterValueV2 = (*len).as_ref();
-            let len: usize = xx.as_any().downcast_ref::<KlisterInteger>().unwrap().val.clone().try_into().unwrap();
+            let len = ask!(arraylike.borrow().dot(&arraylike, "len"));
+            let len: usize = {
+                let borrower = len.borrow();
+                let xx: &dyn KlisterValueV2 = borrower.as_ref();
+                xx.as_any().downcast_ref::<KlisterInteger>().unwrap().val.clone().try_into().unwrap()
+            };
             for i in 0..len {
-                let v = ask!(arraylike.subscript(context, &valwrap(KlisterInteger{val: i.into()})));
+                let v = ask!(arraylike.borrow().subscript(context, &valwrap(KlisterInteger{val: i.into()})));
 
                 context.put_var(varname, v);
 

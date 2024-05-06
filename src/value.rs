@@ -8,6 +8,7 @@ use std::fmt::Debug;
 use as_any::{AsAny, Downcast};
 use dyn_clone::DynClone;
 use gc::Gc;
+use gc::GcCell;
 use gc::Trace;
 use libffi::middle::Arg;
 use num_traits::cast::ToPrimitive;
@@ -19,10 +20,10 @@ use crate::except::KlisterRTE;
 use crate::interpret::Context;
 use crate::interpret::handle_statement;
 
-pub type ValWrap = Gc<Box<dyn KlisterValueV2>>;
+pub type ValWrap = Gc<GcCell<Box<dyn KlisterValueV2>>>;
 
 pub fn valwrap(v: impl KlisterValueV2 + 'static) -> ValWrap {
-    return Gc::new(Box::new(v))
+    return Gc::new(GcCell::new(Box::new(v)))
 }
 
 pub enum Oppi<T, E> {
@@ -36,12 +37,12 @@ fn invalid_member_exception(type_s: &str, index: &str) -> KlisterRTE {
 }
 
 pub fn bin_op(op: Operation, lhs: ValWrap, rhs: ValWrap) -> Result<ValWrap, KlisterRTE> {
-    match lhs.bin_op_forward(op, (*rhs).as_ref()) {
+    match lhs.borrow().bin_op_forward(op, (*rhs).borrow().as_ref()) {
         Oppi::Ok(a) => {return Result::Ok(a)}
         Oppi::Err(a) => {return Result::Err(a)}
         Oppi::NotSupported => {}
     }
-    match rhs.bin_op_backward(op, (*lhs).as_ref()) {
+    match rhs.borrow().bin_op_backward(op, (*lhs).borrow().as_ref()) {
         Oppi::Ok(a) => {return Result::Ok(a)}
         Oppi::Err(a) => {return Result::Err(a)}
         Oppi::NotSupported => {}
@@ -245,7 +246,7 @@ pub struct KlisterCFunction {
 
 impl KlisterValueV2 for KlisterCFunction {
     fn call(&self, context: &mut Context, arguments: Vec<ValWrap>) -> Result<ValWrap, KlisterRTE> {
-        let arguments2 = arguments.into_iter().map(|x| (*x).clone()).collect::<Vec<_>>();
+        let arguments2 = arguments.into_iter().map(|x| (*x).borrow().clone()).collect::<Vec<_>>();
         ffi_call(&mut context.libs, &self.name, arguments2)
     }
 }
@@ -284,11 +285,15 @@ impl KlisterValueV2 for KlisterStr {
     }
 
     fn subscript(&self, _context: &mut Context, subscript: &ValWrap) -> Result<ValWrap, KlisterRTE>  {
-        let xx: &dyn KlisterValueV2 = (**subscript).as_ref();
-        let Some(index) = xx.as_any().downcast_ref::<KlisterInteger>() else {
-            return Err(KlisterRTE::new("Index is not integer", false));
+        let iclone = {
+            let borrower = subscript.borrow();
+            let xx: &dyn KlisterValueV2 = borrower.as_ref();
+            let Some(index) = xx.as_any().downcast_ref::<KlisterInteger>() else {
+                return Err(KlisterRTE::new("Index is not integer", false));
+            };
+            index.val.clone()
         };
-        let Ok(ind) = index.val.clone().try_into() else {
+        let Ok(ind) = iclone.try_into() else {
             return Err(KlisterRTE::new("Index is not valid usize", false));
         };
         let Some(nthchar) = self.val.chars().nth(ind) else {
@@ -531,7 +536,7 @@ pub struct KlisterMemberFunction {
 
 impl KlisterValueV2 for KlisterMemberFunction {
     fn call(&self, context: &mut Context, arguments: Vec<ValWrap>) -> Result<ValWrap, KlisterRTE> {
-        return self.obj.member_function(context, &self.name, arguments);
+        return self.obj.borrow().member_function(context, &self.name, arguments);
     }
 }
 
@@ -656,11 +661,15 @@ pub struct KlisterArray {
 
 impl KlisterValueV2 for KlisterArray {
     fn subscript(&self, _context: &mut Context, subscript: &ValWrap) -> Result<ValWrap, KlisterRTE>  {
-        let xx: &dyn KlisterValueV2 = (**subscript).as_ref();
-        let Some(index) = xx.as_any().downcast_ref::<KlisterInteger>() else {
-            return Err(KlisterRTE::new("Index is not integer", false));
+        let iclone = {
+            let borrower = subscript.borrow();
+            let xx: &dyn KlisterValueV2 = borrower.as_ref();
+            let Some(index) = xx.as_any().downcast_ref::<KlisterInteger>() else {
+                return Err(KlisterRTE::new("Index is not integer", false));
+            };
+            index.val.clone()
         };
-        let Ok(ind): Result<usize, _> = index.val.clone().try_into() else {
+        let Ok(ind): Result<usize, _> = iclone.try_into() else {
             return Err(KlisterRTE::new("Index is not valid usize", false));
         };
         let Some(ret): Option<&ValWrap> = self.val.get(ind) else {
@@ -685,7 +694,8 @@ pub struct KlisterDict {
 
 impl KlisterValueV2 for KlisterDict {
     fn subscript(&self, _context: &mut Context, subscript: &ValWrap) -> Result<ValWrap, KlisterRTE>  {
-        let xx: &dyn KlisterValueV2 = (**subscript).as_ref();
+        let borrower = subscript.borrow();
+        let xx: &dyn KlisterValueV2 = borrower.as_ref();
         let Some(index) = xx.as_any().downcast_ref::<KlisterStr>() else {
             return Err(KlisterRTE::new("Index is not string", false));
         };
