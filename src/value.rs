@@ -276,6 +276,13 @@ impl KlisterValueV2 for KlisterStr {
         return Ok(self.val.as_bytes().to_vec());
     }
 
+    fn dot_impl(&self, gcself: &ValWrap, subscript: &str) -> Option<ValWrap> {
+        match subscript {
+            "parse_json" => Some(KlisterMemberFunction::new(gcself, subscript)),
+            _ => None,
+        }
+    }
+
     fn subscript(&self, _context: &mut Context, subscript: &ValWrap) -> Result<ValWrap, KlisterRTE>  {
         let xx: &dyn KlisterValueV2 = (**subscript).as_ref();
         let Some(index) = xx.as_any().downcast_ref::<KlisterInteger>() else {
@@ -292,6 +299,21 @@ impl KlisterValueV2 for KlisterStr {
         let bi:BigInt = cu32.into();
         Ok(KlisterInteger::wrap(bi))
     }
+
+
+    fn member_function(&self, _context: &mut Context, name: &str, arguments: Vec<ValWrap>) -> Result<ValWrap, KlisterRTE> {
+        match name {
+            "parse_json" => {
+                if arguments.len() != 0 {
+                    return Err(KlisterRTE::new("Wrong number of arguments", false));
+                }
+                let serde_value = serde_json::from_str(&self.val).map_err(|_| KlisterRTE::new(&format!("Not valid json {}", &self.val), true))?;
+
+                return recursive_convert(serde_value);
+            }
+            _ => {return Err(KlisterRTE::new(&format!("Type {} has no member function {}", self.get_type_name(), name), false));}
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -301,6 +323,40 @@ pub struct KlisterBytes {
     pub val: Vec<u8>,
 }
 
+fn recursive_convert(v: serde_json::Value) -> Result<ValWrap, KlisterRTE> {
+    use serde_json::Value as V;
+    Ok(match v {
+        V::Null => valwrap(KlisterNothing{}),
+        V::Bool(b) => valwrap(KlisterBool{val: b}),
+        V::Number(n) => {
+            // todo: Might want to use bigint if appropriate
+            let Some(f) = n.as_f64() else {
+                return Err(KlisterRTE::new("Invalid number in json", true));
+            };
+            valwrap(KlisterDouble{val: f})
+        },
+        V::String(s) => valwrap(KlisterStr{val: s}),
+        V::Array(a) => {
+            let mut theval = Vec::new();
+            for v in a.into_iter() {
+                theval.push(recursive_convert(v)?)
+            }
+            valwrap(KlisterArray{val: theval})
+        },
+        V::Object(o) => {
+            let mut theval = HashMap::new();
+            for (k, v) in o.into_iter() {
+                let v = recursive_convert(v)?;
+                let old = theval.insert(k, v);
+                if old.is_some() {
+                    return Err(KlisterRTE::new("Duplicate key in json", true));
+                }
+            }
+            valwrap(KlisterDict{val: theval})
+        },
+    })
+}
+
 impl KlisterValueV2 for KlisterBytes {
     fn dot_impl(&self, gcself: &ValWrap, subscript: &str) -> Option<ValWrap> {
         match subscript {
@@ -308,6 +364,7 @@ impl KlisterValueV2 for KlisterBytes {
             "read0_strs" => Some(KlisterMemberFunction::new(gcself, subscript)),
             "read0" => Some(KlisterMemberFunction::new(gcself, subscript)),
             "parse_string" => Some(KlisterMemberFunction::new(gcself, subscript)),
+            "parse_json" => Some(KlisterMemberFunction::new(gcself, subscript)),
             _ => None,
         }
     }
@@ -365,9 +422,20 @@ impl KlisterValueV2 for KlisterBytes {
                     return Err(KlisterRTE::new("Wrong number of arguments", false));
                 }
                 let Ok(s) = String::from_utf8(self.val.clone()) else {
-                    return Err(KlisterRTE::new("Not valid string", false));
+                    return Err(KlisterRTE::new("Not valid string", true));
                 };
                 return Ok(valwrap(KlisterStr{val: s}));
+            }
+            "parse_json" => {
+                if arguments.len() != 0 {
+                    return Err(KlisterRTE::new("Wrong number of arguments", false));
+                }
+                let Ok(s) = String::from_utf8(self.val.clone()) else {
+                    return Err(KlisterRTE::new("Not valid string", true));
+                };
+                let serde_value = serde_json::from_str(&s).map_err(|_| KlisterRTE::new("Not valid json", true))?;
+
+                return recursive_convert(serde_value);
             }
             _ => {return Err(KlisterRTE::new(&format!("Type {} has no member function {}", self.get_type_name(), name), false));}
         }

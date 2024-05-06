@@ -38,6 +38,8 @@ if (might_fail.is_ok) {
 
 `cat <<<err$asdf 1>&2`
 
+# w`echo ${`curl http://api.open-notify.org/iss-now.json 2>/dev/null`.parse_json()["iss_position"]["latitude"]}`
+
 b=`echo hello world | tr a-z A-Z|tail -c 6`
 puts(writebytes(b))
 

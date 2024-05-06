@@ -95,11 +95,11 @@ fn parse_precedence_6(s: &mut& str) -> ParseResult<KlisterExpression> {
             if c == '"' {
                 *s = &s[pos+c.len_utf8()..];
                 return Ok(KlisterExpression::Literal(Box::new(KlisterStr{val: out_str})));
-            }
-            if c == '\\' {
+            } else if c == '\\' {
                 out_str.push(in_chars.next().context(s,"Incomplete escape sequence")?.1);
+            } else {
+                out_str.push(c);
             }
-            out_str.push(c);
         }
     }
     static FLOAT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[+-]?[0-9]+(\.[0-9]+|[eE]-?[0-9]+|\.[0-9]+[eE]-?[0-9]+)").unwrap());
