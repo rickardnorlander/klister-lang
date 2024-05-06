@@ -20,6 +20,35 @@ use crate::value::KlisterNothing;
 use crate::value::ValWrap;
 use crate::value::valwrap;
 
+
+#[must_use] 
+pub enum ExpE<T> {
+    Ok(T),
+    Err(KlisterRTE),
+    Return(ValWrap),
+}
+
+type ExpV = ExpE<ValWrap>;
+
+macro_rules! ask {
+    ($myexpr:expr) => {
+        match $myexpr {
+            Ok(v) => v,
+            Err(e) => {return ExpE::Err(e)},
+        }
+    };
+}
+
+macro_rules! ask2 {
+    ($myexpr:expr) => {
+        match $myexpr {
+            ExpE::Ok(v) => v,
+            ExpE::Err(e) => {return ExpE::Err(e)},
+            ExpE::Return(r) => {return ExpE::Return(r)},
+        }
+    };
+}
+
 #[derive(gc::Trace, gc::Finalize)]
 pub struct Context {
     #[unsafe_ignore_trace]
@@ -62,7 +91,7 @@ fn handle_import(context: &mut Context, libname: &str, fname: &str, rettypename:
     Ok(())
 }
 
-fn handle_shell_arg(context: &mut Context, glob_parts: &Vec<GlobPart>, just_one: bool) -> Result<Vec<Vec<u8>>, KlisterRTE> {
+fn handle_shell_arg(context: &mut Context, glob_parts: &Vec<GlobPart>, just_one: bool) -> ExpE<Vec<Vec<u8>>> {
     let mut out_arg = Vec::<u8>::new();
     for part in glob_parts {
         match part {
@@ -70,75 +99,75 @@ fn handle_shell_arg(context: &mut Context, glob_parts: &Vec<GlobPart>, just_one:
                 out_arg.extend(s.as_bytes());
             }
             GlobPart::Interpolation(ref expr) => {
-                let val = handle_expression(context, expr)?.interpolate()?;
+                let val = ask!(ask2!(handle_expression(context, expr)).interpolate());
                 out_arg.extend(&val);
             }
             GlobPart::Asterisk => {
-                return Err(KlisterRTE::new("Asterisks are not supported yet", false));
+                return ExpE::Err(KlisterRTE::new("Asterisks are not supported yet", false));
             }
             GlobPart::ArrayInterpolation(ref expr) => {
                 if just_one {
-                    return Err(KlisterRTE::new("Array interpolation not allowed in this context", false));
+                    return ExpE::Err(KlisterRTE::new("Array interpolation not allowed in this context", false));
                 }
                 if glob_parts.len() != 1 {
-                    return Err(KlisterRTE::new("Array interpolation cannot be affixed", false));
+                    return ExpE::Err(KlisterRTE::new("Array interpolation cannot be affixed", false));
                 }
-                let val = handle_expression(context, expr)?;
+                let val = ask2!(handle_expression(context, expr));
                 let xx: &dyn KlisterValueV2 = (*val).as_ref();
-                let arr = xx.as_any().downcast_ref::<KlisterArray>().ok_or_else(|| KlisterRTE::new("Expression was not array", false))?;
+                let arr = ask!(xx.as_any().downcast_ref::<KlisterArray>().ok_or_else(|| KlisterRTE::new("Expression was not array", false)));
                 let mut out_vec = Vec::new();
                 for qq in &arr.val {
-                    out_vec.push(qq.interpolate()?);
+                    out_vec.push(ask!(qq.interpolate()));
                 }
-                return Ok(out_vec);
+                return ExpE::Ok(out_vec);
             }
         }
     }
     let out_vec = vec![out_arg];
-    return Ok(out_vec);
+    return ExpE::Ok(out_vec);
 }
 
-fn handle_just_one(context: &mut Context, glob_parts: &Vec<GlobPart>) -> Result<OsString, KlisterRTE> {
-    let ret = handle_shell_arg(context, glob_parts, true)?;
+fn handle_just_one(context: &mut Context, glob_parts: &Vec<GlobPart>) -> ExpE<OsString> {
+    let ret = ask2!(handle_shell_arg(context, glob_parts, true));
     if ret.len() != 1 {
-        return Err(KlisterRTE::new("Invalid expansion", false)); 
+        return ExpE::Err(KlisterRTE::new("Invalid expansion", false)); 
     }
-    return Ok(verified_osstring_from_vec(ret.into_iter().next().unwrap())?)
+    return ExpE::Ok(ask2!(verified_osstring_from_vec(ret.into_iter().next().unwrap())))
 }
 
-fn handle_just_two(context: &mut Context, glob_parts: &Vec<GlobPart>) -> Result<Vec<u8>, KlisterRTE> {
-    let ret = handle_shell_arg(context, glob_parts, true)?;
+fn handle_just_two(context: &mut Context, glob_parts: &Vec<GlobPart>) -> ExpE<Vec<u8>> {
+    let ret = ask2!(handle_shell_arg(context, glob_parts, true));
     if ret.len() != 1 {
-        return Err(KlisterRTE::new("Invalid expansion", false)); 
+        return ExpE::Err(KlisterRTE::new("Invalid expansion", false)); 
     }
-    return Ok(ret.into_iter().next().unwrap())
+    return ExpE::Ok(ret.into_iter().next().unwrap())
 }
 
 use std::os::unix::ffi::OsStringExt;
 
-fn verified_osstring_from_vec(v: Vec<u8>) -> Result<OsString, KlisterRTE> {
+fn verified_osstring_from_vec(v: Vec<u8>) -> ExpE<OsString> {
     for b in &v {
         if *b == 0 {
-            return Err(KlisterRTE::new("Embedded nul", true)); 
+            return ExpE::Err(KlisterRTE::new("Embedded nul", true)); 
         }
     }
-    return Ok(OsString::from_vec(v));
+    return ExpE::Ok(OsString::from_vec(v));
 }
 
-fn handle_shell_args(context: &mut Context, argon: &Vec<Vec<GlobPart>>) -> Result<Vec<OsString>, KlisterRTE> {
+fn handle_shell_args(context: &mut Context, argon: &Vec<Vec<GlobPart>>) -> ExpE<Vec<OsString>> {
     let mut ret = Vec::<OsString>::new();
     for argona in argon {
-        for x in handle_shell_arg(context, argona, false)? {
-            ret.push(verified_osstring_from_vec(x)?);
+        for x in ask2!(handle_shell_arg(context, argona, false)) {
+            ret.push(ask2!(verified_osstring_from_vec(x)));
         }
     }
-    return Ok(ret);
+    return ExpE::Ok(ret);
 }
 
-fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<KlisterShellRes, KlisterRTE> {
+fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> ExpE<KlisterShellRes> {
     let cmds = &sp.commands;
     if cmds.len() == 0 {
-        return Err(KlisterRTE::new("Empty pipeline", false));
+        return ExpE::Err(KlisterRTE::new("Empty pipeline", false));
     };
 
     let mut output_opt: Option<Vec<u8>> = None;
@@ -147,8 +176,8 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<K
     let cmdlen = cmds.len();
 
     for cmd in cmds.into_iter() {
-        let args = handle_shell_args(context, &cmd.args)?;
-        let command = handle_just_one(context, &cmd.command)?;
+        let args = ask2!(handle_shell_args(context, &cmd.args));
+        let command = ask2!(handle_just_one(context, &cmd.command));
 
         let mut ductcmd = duct::cmd(command, args);
 
@@ -157,36 +186,36 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<K
         match output_opt {
             Some(bytes) => {
                 if !matches!(cmd.stdin, Stdinput::Default) {
-                    return Err(KlisterRTE::new("Invalid stdin redirect", false));
+                    return ExpE::Err(KlisterRTE::new("Invalid stdin redirect", false));
                 }
                 ductcmd = ductcmd.stdin_bytes(bytes);
             }
             None => {
                 match cmd.stdin {
                     Stdinput::Default => {}
-                    Stdinput::File(ref f) => {ductcmd = ductcmd.stdin_path(handle_just_one(context, f)?);}
-                    Stdinput::Heredoc(ref f) => {ductcmd = ductcmd.stdin_bytes(handle_just_two(context, f)?);}
+                    Stdinput::File(ref f) => {ductcmd = ductcmd.stdin_path(ask2!(handle_just_one(context, f)));}
+                    Stdinput::Heredoc(ref f) => {ductcmd = ductcmd.stdin_bytes(ask2!(handle_just_two(context, f)));}
                 }
             }
         };
         match &cmd.outerr {
             OutErr::NoMerge(o_opt, e_opt) => {
                 if let Some(ref o) = o_opt {
-                    if go_through {return Err(KlisterRTE::new("Invalid stdout redirect", false));}
-                    ductcmd = ductcmd.stdout_path(handle_just_one(context, o)?);
+                    if go_through {return ExpE::Err(KlisterRTE::new("Invalid stdout redirect", false));}
+                    ductcmd = ductcmd.stdout_path(ask2!(handle_just_one(context, o)));
                 }
                 if let Some(ref e) = e_opt {
-                    ductcmd = ductcmd.stderr_path(handle_just_one(context, e)?);
+                    ductcmd = ductcmd.stderr_path(ask2!(handle_just_one(context, e)));
                 }
             }
             OutErr::MergedToStderr => {
-                if go_through {return Err(KlisterRTE::new("Invalid stdout redirect", false));}
+                if go_through {return ExpE::Err(KlisterRTE::new("Invalid stdout redirect", false));}
                 ductcmd = ductcmd.stdout_to_stderr()
             }
             OutErr::MergedToStdout => {ductcmd = ductcmd.stderr_to_stdout()}
             OutErr::MergedToFile(ref o) => {
-                if go_through {return Err(KlisterRTE::new("Invalid stdout redirect", false));}
-                ductcmd = ductcmd.stderr_to_stdout().stdout_path(handle_just_one(context, o)?);
+                if go_through {return ExpE::Err(KlisterRTE::new("Invalid stdout redirect", false));}
+                ductcmd = ductcmd.stderr_to_stdout().stdout_path(ask2!(handle_just_one(context, o)));
             }
         };
         if !go_through {
@@ -194,11 +223,11 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<K
         }
         let child_res = ductcmd.unchecked().run();
         let Ok(child_res) = child_res else {
-            return Ok(KlisterShellRes::SResErr(KlisterRTE::new("Failed to run command", true), Vec::new(), None));
+            return ExpE::Ok(KlisterShellRes::SResErr(KlisterRTE::new("Failed to run command", true), Vec::new(), None));
         };
 
         if !child_res.status.success() {
-            return Ok(KlisterShellRes::SResErr(KlisterRTE::new("Shell command failed", true), child_res.stdout, child_res.status.code()));
+            return ExpE::Ok(KlisterShellRes::SResErr(KlisterRTE::new("Shell command failed", true), child_res.stdout, child_res.status.code()));
         }
 
         // todo: Unnecessary clones here, clean this up.
@@ -206,178 +235,159 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> Result<K
         output_opt = Some(child_res.stdout.clone())
     }
     let output = output_opt.expect("Internal interpreter error: Output was none");
-    Ok(KlisterShellRes::SResOk(output))
+    ExpE::Ok(KlisterShellRes::SResOk(output))
 }
 
-fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> Result<ValWrap, KlisterRTE> {
+
+fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> ExpV {
     match expression {
         KlisterExpression::Array(arr) => {
-            let argument_values: Vec<ValWrap> = arr.iter().map(|x| handle_expression(context, x)).collect::<Result<Vec<ValWrap>, KlisterRTE>>()?;
-            return Ok(valwrap(KlisterArray{val: argument_values}))
+            let mut argument_values = Vec::new();
+            for x in arr.iter() {
+                argument_values.push(ask2!(handle_expression(context, x)));
+            }
+            return ExpE::Ok(valwrap(KlisterArray{val: argument_values}))
         }
         KlisterExpression::Call(fn_expr, arguments) => {
-            let argument_values: Vec<ValWrap> = arguments.iter().map(|x| handle_expression(context, x)).collect::<Result<Vec<ValWrap>, KlisterRTE>>()?;
-            let v = handle_expression(context, fn_expr)?;
-            return v.call(context, argument_values)
+            let mut argument_values = Vec::new();
+            for x in arguments.iter() {
+                argument_values.push(ask2!(handle_expression(context, x)));
+            }
+            let v = ask2!(handle_expression(context, fn_expr));
+            return ExpE::Ok(ask!(v.call(context, argument_values)))
         }
         KlisterExpression::Index(arr, index) => {
-            let lv = handle_expression(context, arr)?;
-            let rv = handle_expression(context, index)?;
-            return lv.subscript(context, &rv);
+            let lv = ask2!(handle_expression(context, arr));
+            let rv = ask2!(handle_expression(context, index));
+            return ExpE::Ok(ask!(lv.subscript(context, &rv)));
         }
         KlisterExpression::Dot(obj_expr, subscript) => {
-            let obj = handle_expression(context, obj_expr)?;
-            return obj.dot(&obj, subscript);
+            let obj = ask2!(handle_expression(context, obj_expr));
+            return ExpE::Ok(ask!(obj.dot(&obj, subscript)));
         }
-        KlisterExpression::Literal(v) => {Ok(Gc::new(v.clone()))}
+        KlisterExpression::Literal(v) => {ExpE::Ok(Gc::new(v.clone()))}
         KlisterExpression::Variable(v) => {
             match context.get_var(v) {
-                Some(val) => Ok(val.clone()),
-                None => {return Err(KlisterRTE::new(&format!("Variable not defined {}", v), false));}
+                Some(val) => ExpE::Ok(val.clone()),
+                None => {return ExpE::Err(KlisterRTE::new(&format!("Variable not defined {}", v), false));}
             }
         }
         KlisterExpression::BinOp(op, left, right) => {
-            let lv = handle_expression(context, left)?;
-            let rv = handle_expression(context, right)?;
-            bin_op(op.clone(), lv, rv)
+            let lv = ask2!(handle_expression(context, left));
+            let rv = ask2!(handle_expression(context, right));
+            ExpE::Ok(ask!(bin_op(op.clone(), lv, rv)))
         }
         KlisterExpression::Not(expr) => {
-            let v = handle_expression(context, expr)?;
-            v.un_op("!")
+            let v = ask2!(handle_expression(context, expr));
+            ExpE::Ok(ask!(v.un_op("!")))
         }
         KlisterExpression::CatchExpr(expr) => {
             let v_res = handle_expression(context, expr);
             match v_res {
-                Ok(v) => {
-                    Ok(KlisterResult::ok_wrapped(v))
+                ExpE::Ok(v) => {
+                    ExpE::Ok(KlisterResult::ok_wrapped(v))
                 }
-                Err(e) => {
+                ExpE::Err(e) => {
                     if e.catchable {
-                        Ok(valwrap(KlisterResult::ResErr(Box::new(e))))
+                        ExpE::Ok(valwrap(KlisterResult::ResErr(Box::new(e))))
                     } else {
-                        Err(e)
+                        ExpE::Err(e)
                     }
+                }
+                ExpE::Return(r) => {
+                    return ExpE::Return(r);
                 }
             }
         }
         KlisterExpression::CatchBlock(block) => {
             let v_res = handle_statement(context, block);
             match v_res {
-                StatementE::AllGood => {
-                    Ok(KlisterResult::ok_wrapped(valwrap(KlisterNothing{})))
+                ExpE::Ok(_) => {
+                    ExpE::Ok(KlisterResult::ok_wrapped(valwrap(KlisterNothing{})))
                 }
-                StatementE::Return(r) => {
-                    todo!("Can't return from catch blocks")
+                ExpE::Return(r) => {
+                    return ExpE::Return(r);
                 }
-                StatementE::Err(e) => {
+                ExpE::Err(e) => {
                     if e.catchable {
-                        Ok(valwrap(KlisterResult::ResErr(Box::new(e))))
+                        ExpE::Ok(valwrap(KlisterResult::ResErr(Box::new(e))))
                     } else {
-                        Err(e)
+                        ExpE::Err(e)
                     }
                 }
             }
         }
         KlisterExpression::ShellPipeline(sp) => {
-            let result = handle_shell_pipeline(context, sp)?;
+            let result = ask2!(handle_shell_pipeline(context, sp));
             if sp.is_catch {
-                return Ok(valwrap(result));
+                return ExpE::Ok(valwrap(result));
             }
             return match result {
                 // Todo: unncessary clones here, remove.
                 KlisterShellRes::SResOk(ref v) => {
-                    Ok(valwrap(KlisterBytes{val: v.clone()}))
+                    ExpE::Ok(valwrap(KlisterBytes{val: v.clone()}))
                 }
                 KlisterShellRes::SResErr(ref e, _, _) => {
-                    Err(e.clone())
+                    ExpE::Err(e.clone())
                 }
             }
         }
     }
-}
-
-pub enum StatementE {
-    AllGood,
-    Return(ValWrap),
-    Err(KlisterRTE),
-}
-
-fn rtose<T>(a: Result<T, KlisterRTE>) -> StatementE {
-    match a {
-        Ok(_) => StatementE::AllGood,
-        Err(e) => StatementE::Err(e),
-    }
-}
-
-
-macro_rules! ask {
-    ($myexpr:expr) => {
-        match $myexpr {
-            Ok(v) => v,
-            Err(e) => {return StatementE::Err(e)},
-        }
-    };
 }
 
 use crate::value::KlisterInteger;
 use crate::value::KlisterValueV2;
 
-pub fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> StatementE {
+pub fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> ExpE<()> {
     match statement {
         KlisterStatement::Function(name, arg_names, block) => {
             context.put_var(name, valwrap(KlisterFunction{body: block.clone(), arg_names: arg_names.clone()}));
-            StatementE::AllGood
+            ExpE::Ok(())
         }
         KlisterStatement::Import(libname, fname, rettypename, argnames) => {
-            rtose(handle_import(context, libname, fname, rettypename, argnames))
+            ask!(handle_import(context, libname, fname, rettypename, argnames));
+            ExpE::Ok(())
         }
         KlisterStatement::Expression(expression) => {
-            rtose(handle_expression(context, &expression))
+            ask2!(handle_expression(context, &expression));
+            ExpE::Ok(())
         }
         KlisterStatement::Assign(name, expression) => {
-            let val = ask!(handle_expression(context, &expression));
+            let val = ask2!(handle_expression(context, &expression));
             context.put_var(name, val);
-            StatementE::AllGood
+            ExpE::Ok(())
         }
         KlisterStatement::Return(expression) => {
-            let val = ask!(handle_expression(context, &expression));
-            StatementE::Return(val)
+            let val = ask2!(handle_expression(context, &expression));
+            ExpE::Return(val)
         }
         KlisterStatement::Block(statements) => {
             for part in statements {
-                match handle_statement(context, part) {
-                    StatementE::AllGood => {},
-                    StatementE::Err(e) => {return StatementE::Err(e)},
-                    StatementE::Return(r) => {return StatementE::Return(r)},
-                }
+                ask2!(handle_statement(context, part));
             }
-            StatementE::AllGood
+            ExpE::Ok(())
         }
         KlisterStatement::While(condition, block) => {
             loop {
-                let cond_val = ask!(ask!(handle_expression(context, &condition)).bool_val());
+                let cond_val = ask!(ask2!(handle_expression(context, &condition)).bool_val());
                 if !cond_val {
                     break;
                 }
-                match handle_statement(context, block) {
-                    StatementE::AllGood => {},
-                    StatementE::Err(e) => {return StatementE::Err(e)},
-                    StatementE::Return(r) => {return StatementE::Return(r)},
-                }
+                ask2!(handle_statement(context, block));
             }
-            StatementE::AllGood
+            ExpE::Ok(())
         }
         KlisterStatement::If(condition, ifblock, elseblock_opt) => {
-            let cond_val = ask!(ask!(handle_expression(context, &condition)).bool_val());
+            let cond_val = ask!(ask2!(handle_expression(context, &condition)).bool_val());
             if cond_val {
                 return handle_statement(context, ifblock);
             } else if let Some(elseblock) = elseblock_opt {
                 return handle_statement(context, elseblock);
             }
-            StatementE::AllGood
+            ExpE::Ok(())
         }
         KlisterStatement::ForEach(varname, expr, block) => {
-            let arraylike = ask!(handle_expression(context, &expr));
+            let arraylike = ask2!(handle_expression(context, &expr));
             let len = ask!(arraylike.dot(&arraylike, "len"));
             let xx: &dyn KlisterValueV2 = (*len).as_ref();
             let len: usize = xx.as_any().downcast_ref::<KlisterInteger>().unwrap().val.clone().try_into().unwrap();
@@ -386,13 +396,9 @@ pub fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> 
 
                 context.put_var(varname, v);
 
-                match handle_statement(context, block) {
-                    StatementE::AllGood => {},
-                    StatementE::Err(e) => {return StatementE::Err(e)},
-                    StatementE::Return(r) => {return StatementE::Return(r)},
-                }
+                ask2!(handle_statement(context, block));
             }
-            StatementE::AllGood
+            ExpE::Ok(())
         }
     }
 }
@@ -408,8 +414,8 @@ pub fn interpret_ast(ast: KlisterStatement, arguments: Vec<String>) -> Option<Kl
     context.put_var("env", wrapped_env_vars);
 
     match handle_statement(&mut context, &ast) {
-        StatementE::AllGood => None,
-        StatementE::Err(e) => {return Some(e)},
-        StatementE::Return(_r) => {return Some(KlisterRTE::new("Global scope cannot return", false))},
+        ExpE::Ok(_) => None,
+        ExpE::Err(e) => {return Some(e)},
+        ExpE::Return(_r) => {return Some(KlisterRTE::new("Global scope cannot return", false))},
     } 
 }

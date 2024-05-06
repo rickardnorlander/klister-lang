@@ -15,6 +15,16 @@ for (arg in argv) {
     puts(arg)
 }
 
+function testretinblock() {
+    a = ?{
+        `true`
+        return 1
+        `false`
+    }
+}
+
+b = testretinblock()
+
 res = ?{
     w`echo 1`
     `false`

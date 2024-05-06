@@ -152,7 +152,7 @@ pub struct KlisterFunction {
     pub arg_names: Vec<String>,
 }
 
-use crate::interpret::StatementE;
+use crate::interpret::ExpE;
 
 impl KlisterValueV2 for KlisterFunction {
     fn call(&self, context: &mut Context, arguments: Vec<ValWrap>) -> Result<ValWrap, KlisterRTE> {
@@ -164,9 +164,9 @@ impl KlisterValueV2 for KlisterFunction {
             context.put_var(n, v)
         }
         let res = match handle_statement(context, self.body.as_ref()) {
-            StatementE::AllGood => Ok(valwrap(KlisterNothing{})),
-            StatementE::Err(e) => Err(e),
-            StatementE::Return(r) => Ok(r),
+            ExpE::Ok(_) => Ok(valwrap(KlisterNothing{})),
+            ExpE::Err(e) => Err(e),
+            ExpE::Return(r) => Ok(r),
         };
         context.exit_function();
         return res;
