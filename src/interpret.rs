@@ -9,6 +9,7 @@ use crate::ccall::Libraries;
 use crate::except::KlisterRTE;
 use crate::value::bin_op;
 use crate::value::KlisterArray;
+use crate::value::KlisterBool;
 use crate::value::KlisterBytes;
 use crate::value::KlisterCFunction;
 use crate::value::KlisterDict;
@@ -274,6 +275,12 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> E
         }
         KlisterExpression::BinOp(op, left, right) => {
             let lv = ask2!(handle_expression(context, left));
+            if matches!(op, Operation::Or) && ask!(lv.bool_val()) == true {
+                return ExpE::Ok(valwrap(KlisterBool{val: true}))
+            }
+            if matches!(op, Operation::And) && ask!(lv.bool_val()) == false {
+                return ExpE::Ok(valwrap(KlisterBool{val: false}))
+            }
             let rv = ask2!(handle_expression(context, right));
             ExpE::Ok(ask!(bin_op(op.clone(), lv, rv)))
         }
