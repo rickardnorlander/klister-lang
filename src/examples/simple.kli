@@ -15,6 +15,15 @@ for (arg in argv) {
     puts(arg)
 }
 
+res = ?{
+    w`echo 1`
+    `false`
+    w`echo 2`
+}
+if (res.is_ok) {
+    w`echo yup`
+}
+
 w`echo $[]{argv}`
 
 puts(env["HOME"])

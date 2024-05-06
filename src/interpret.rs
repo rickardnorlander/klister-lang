@@ -16,6 +16,7 @@ use crate::value::KlisterFunction;
 use crate::value::KlisterResult;
 use crate::value::KlisterShellRes;
 use crate::value::KlisterStr;
+use crate::value::KlisterNothing;
 use crate::value::ValWrap;
 use crate::value::valwrap;
 
@@ -251,6 +252,24 @@ fn handle_expression(context: &mut Context, expression: &KlisterExpression) -> R
                     Ok(KlisterResult::ok_wrapped(v))
                 }
                 Err(e) => {
+                    if e.catchable {
+                        Ok(valwrap(KlisterResult::ResErr(Box::new(e))))
+                    } else {
+                        Err(e)
+                    }
+                }
+            }
+        }
+        KlisterExpression::CatchBlock(block) => {
+            let v_res = handle_statement(context, block);
+            match v_res {
+                StatementE::AllGood => {
+                    Ok(KlisterResult::ok_wrapped(valwrap(KlisterNothing{})))
+                }
+                StatementE::Return(r) => {
+                    todo!("Can't return from catch blocks")
+                }
+                StatementE::Err(e) => {
                     if e.catchable {
                         Ok(valwrap(KlisterResult::ResErr(Box::new(e))))
                     } else {

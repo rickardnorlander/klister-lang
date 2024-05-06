@@ -125,6 +125,11 @@ fn parse_precedence_6(s: &mut& str) -> ParseResult<KlisterExpression> {
         return parse_catch_expr(s);
     }
 
+    static CATCH_BLOCK_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\?\{").unwrap());
+    if CATCH_BLOCK_RE.is_match(s) {
+        return parse_catch_block(s);
+    }
+
     static ARRAY_LITERAL: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\[").unwrap());
     if ARRAY_LITERAL.is_match(s) {
         return parse_array(s);
@@ -498,6 +503,12 @@ fn parse_return(s: &mut&str) -> ParseResult<KlisterStatement> {
     return Ok(KlisterStatement::Return(parse_precedence_1(s)?));
 }
 
+fn parse_catch_block(s: &mut&str) -> ParseResult<KlisterExpression> {
+    skip_space_and_newlines(s)?;
+    consume("?", s)?;
+    return Ok(KlisterExpression::CatchBlock(Box::new(parse_block(s)?)));
+}
+
 fn parse_statement(remaining: &mut&str) -> ParseResult<KlisterStatement> {
     skip_space_and_newlines(remaining)?;
     static IMPORT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^import ").unwrap());
@@ -506,6 +517,7 @@ fn parse_statement(remaining: &mut&str) -> ParseResult<KlisterStatement> {
     static FUNCTION_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^function ").unwrap());
     static FOR_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^for[ (]").unwrap());
     static RETURN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^return ").unwrap());
+    static BLOCK_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\{").unwrap());
     if IMPORT_RE.is_match(remaining) {
         return parse_import(remaining);
     } else if WHILE_RE.is_match(remaining) {
@@ -518,6 +530,8 @@ fn parse_statement(remaining: &mut&str) -> ParseResult<KlisterStatement> {
         return parse_return(remaining);
     } else if FOR_RE.is_match(remaining){
         return parse_for(remaining);
+    } else if BLOCK_RE.is_match(remaining){
+        return parse_block(remaining);
     } else {
         return parse_precedence_0(remaining);
     }

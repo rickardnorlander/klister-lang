@@ -74,6 +74,7 @@ pub enum KlisterExpression {
     BinOp(Operation, Box<KlisterExpression>, Box<KlisterExpression>),
     Not(Box<KlisterExpression>),
     CatchExpr(Box<KlisterExpression>),
+    CatchBlock(Box<KlisterStatement>),
     Variable(String),
     // Use box instead of gc as a safeguard, to unsure the ast doesnt get accidentally mutated
     // It's probably actually be fine to use gc though, think about it more at some point.
