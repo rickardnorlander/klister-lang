@@ -73,6 +73,10 @@ impl Context {
         return self.global_scope.get(s);
     }
 
+    fn get_env(&self) -> &ValWrap {
+        return self.global_scope.get("env").expect("Internal interpreter error: Env missing");
+    }
+
     pub fn put_var(&mut self, s: &str, v: ValWrap) {
         let scope: &mut _ = self.function_scopes.last_mut().unwrap_or(&mut self.global_scope);
         scope.insert(s.to_string(), v);
@@ -168,9 +172,28 @@ fn handle_shell_args(context: &mut Context, argon: &Vec<Vec<GlobPart>>) -> ExpE<
 }
 
 fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> ExpE<KlisterShellRes> {
+    // todo: This doesn't work quite like I want it to.. The interpolations should all happen before the pipeline is run.
+
     let cmds = &sp.commands;
     if cmds.len() == 0 {
         return ExpE::Err(KlisterRTE::new("Empty pipeline", false));
+    };
+
+    let env = context.get_env();
+    let env = {
+        let borrower = env.borrow();
+        let xx: &dyn KlisterValueV2 = borrower.as_ref();        
+        let env: &HashMap<String, ValWrap> = &xx.as_any().downcast_ref::<KlisterDict>().unwrap().val;
+        let mut env2: HashMap<String, String> = HashMap::new();
+        for (k, v) in env.iter() {
+            let v = {
+                let borrower = v.borrow();
+                let xx: &dyn KlisterValueV2 = borrower.as_ref();
+                xx.as_any().downcast_ref::<KlisterStr>().unwrap().val.clone()
+            };
+            env2.insert(k.to_string(), v);
+        }
+        env2
     };
 
     let mut output_opt: Option<Vec<u8>> = None;
@@ -182,7 +205,7 @@ fn handle_shell_pipeline(context: &mut Context, sp: &ShellPipelineS) -> ExpE<Kli
         let args = ask2!(handle_shell_args(context, &cmd.args));
         let command = ask2!(handle_just_one(context, &cmd.command));
 
-        let mut ductcmd = duct::cmd(command, args);
+        let mut ductcmd = duct::cmd(command, args).full_env(env.clone());
 
         let go_through = i == cmdlen-1 && sp.is_write;
 
