@@ -95,6 +95,10 @@ pub trait KlisterValueV2: Trace + DynClone + Debug + AsAny {
         return Err(KlisterRTE::new("Object is not subscriptable", false));
     }
 
+    fn subscript_assign(&mut self, _context: &mut Context, _subscript: ValWrap, _val: ValWrap) -> Result<(), KlisterRTE> {
+        return Err(KlisterRTE::new("Object does not have subscript assignment", false));
+    }
+
     fn member_function(&self, _context: &mut Context, name: &str, _arguments: Vec<ValWrap>) -> Result<ValWrap, KlisterRTE> {
         return Err(KlisterRTE::new(&format!("Type {} has no member function {}", self.get_type_name(), name), false));
     }
@@ -677,6 +681,29 @@ impl KlisterValueV2 for KlisterArray {
         };
         Ok(ret.clone())
     }
+
+    fn subscript_assign(&mut self, _context: &mut Context, subscript: ValWrap, set_to: ValWrap) -> Result<(), KlisterRTE>  {
+        let iclone = {
+            let borrower = subscript.borrow();
+            let xx: &dyn KlisterValueV2 = borrower.as_ref();
+            let Some(index) = xx.as_any().downcast_ref::<KlisterInteger>() else {
+                return Err(KlisterRTE::new("Index is not integer", false));
+            };
+            index.val.clone()
+        };
+
+        let Ok(ind): Result<usize, _> = iclone.try_into() else {
+            return Err(KlisterRTE::new("Index is not valid usize", false));
+        };
+        let Some(theref): Option<&mut ValWrap> = self.val.get_mut(ind) else {
+            return Err(KlisterRTE::new("Index out of bounds", false));
+        };
+
+        *theref = set_to;
+
+        Ok(())
+    }
+
     fn dot_impl(&self, _gcself: &ValWrap, subscript: &str) -> Option<ValWrap> {
         match subscript {
             "len" => Some(KlisterInteger::wrap(self.val.len().into())),
@@ -703,5 +730,17 @@ impl KlisterValueV2 for KlisterDict {
             return Err(KlisterRTE::new("Index not present", true));
         };
         Ok(ret.clone())
+    }
+    
+    fn subscript_assign(&mut self, _context: &mut Context, subscript: ValWrap, set_to: ValWrap) -> Result<(), KlisterRTE>  {
+        let borrower = subscript.borrow();
+        let xx: &dyn KlisterValueV2 = borrower.as_ref();
+        let Some(index) = xx.as_any().downcast_ref::<KlisterStr>() else {
+            return Err(KlisterRTE::new("Index is not string", false));
+        };
+        
+        self.val.insert(index.val.clone(), set_to);
+
+        Ok(())
     }
 }

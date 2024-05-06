@@ -369,10 +369,22 @@ pub fn handle_statement(context: &mut Context, statement: &KlisterStatement) -> 
             ask2!(handle_expression(context, &expression));
             ExpE::Ok(())
         }
-        KlisterStatement::Assign(name, expression) => {
-            let val = ask2!(handle_expression(context, &expression));
-            context.put_var(name, val);
-            ExpE::Ok(())
+        KlisterStatement::Assign(lhs, rhs) => {
+            match lhs {
+                KlisterExpression::Variable(name) => {
+                    let val = ask2!(handle_expression(context, &rhs));
+                    context.put_var(name, val);
+                    ExpE::Ok(())
+                }
+                KlisterExpression::Index(ref arr, ref ind) => {
+                    let arr_v = ask2!(handle_expression(context, arr));
+                    let ind_v = ask2!(handle_expression(context, ind));
+                    let val = ask2!(handle_expression(context, &rhs));
+                    ask!(arr_v.borrow_mut().subscript_assign(context, ind_v, val));
+                    ExpE::Ok(())
+                }
+                _ => {return ExpE::Err(KlisterRTE::new("Assignment needs lvalue", false))}
+            }
         }
         KlisterStatement::Return(expression) => {
             let val = ask2!(handle_expression(context, &expression));

@@ -34,7 +34,9 @@ if (res.is_ok) {
     w`echo yup`
 }
 
-w`echo $[]{argv}`
+myarr = [0, 1, 2, 3]
+myarr[2] = 10
+w`echo $[]{myarr}`
 
 puts(env["HOME"])
 

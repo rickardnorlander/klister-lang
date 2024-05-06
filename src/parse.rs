@@ -326,16 +326,12 @@ pub fn parse_expr(s: &mut&str) -> ParseResult<KlisterExpression> {
 }
 
 fn parse_precedence_0(s: &mut&str) -> ParseResult<KlisterStatement> {
-    let mut s2_x = *s;
-    let s2:&mut&str = &mut s2_x;
-    let idid = parse_id(s2);
-    skip_space(s2);
-    if idid.is_ok() && consume("==", s2).is_err() && consume("=", s2).is_ok() {
-        let ret = KlisterStatement::Assign(idid?, parse_precedence_1(s2)?);
-        *s = *s2;
+    let lhs = parse_expr(s)?;
+    if consume("=", s).is_ok() {
+        let ret = KlisterStatement::Assign(lhs, parse_expr(s)?);
         return Ok(ret);
     }
-    return Ok(KlisterStatement::Expression(parse_precedence_1(s)?));
+    return Ok(KlisterStatement::Expression(lhs));
 }
 
 fn consume_remaining_line(s: &mut&str) -> ParseResult<()> {

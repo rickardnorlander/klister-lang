@@ -87,7 +87,7 @@ pub enum KlisterExpression {
 pub enum KlisterStatement {
     Function(String, Vec<String>, Box<KlisterStatement>),
     Import(String, String, String, Vec<String>),
-    Assign(String, KlisterExpression),
+    Assign(KlisterExpression /* runtime error if not lvalue */, KlisterExpression),
     Expression(KlisterExpression),
     Return(KlisterExpression),
     Block(Vec<KlisterStatement>),
