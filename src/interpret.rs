@@ -11,6 +11,7 @@ use crate::except::KlisterRTE;
 use crate::value::bin_op;
 use crate::value::KlisterArray;
 use crate::value::KlisterBool;
+use crate::value::KlisterBuiltin;
 use crate::value::KlisterBytes;
 use crate::value::KlisterCFunction;
 use crate::value::KlisterDict;
@@ -21,7 +22,6 @@ use crate::value::KlisterStr;
 use crate::value::KlisterNothing;
 use crate::value::ValWrap;
 use crate::value::valwrap;
-
 
 #[must_use] 
 pub enum ExpE<T> {
@@ -467,6 +467,8 @@ pub fn interpret_ast(ast: KlisterStatement, arguments: Vec<String>) -> Option<Kl
 
     let wrapped_env_vars = valwrap(KlisterDict{val: env::vars().map(|(x,y)| (x, valwrap(KlisterStr{val: y}))).collect()});
     context.put_var("env", wrapped_env_vars);
+
+    context.put_var("glob", valwrap(KlisterBuiltin{name: "glob".to_string()}));
 
     match handle_statement(&mut context, &ast) {
         ExpE::Ok(_) => None,

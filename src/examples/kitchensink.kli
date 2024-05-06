@@ -34,6 +34,8 @@ if (res.is_ok) {
     w`echo yup`
 }
 
+w`echo $[]{glob("*")}`
+
 myarr = [0, 1, 2, 3]
 myarr[2] = 10
 w`echo $[]{myarr}`

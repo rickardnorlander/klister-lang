@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fmt::Debug;
+use std::os::unix::ffi::OsStringExt;
 
 use as_any::{AsAny, Downcast};
 use dyn_clone::DynClone;
@@ -17,6 +18,7 @@ use crate::ast::KlisterStatement;
 use crate::ast::Operation;
 use crate::ccall::ffi_call;
 use crate::except::KlisterRTE;
+use crate::glob::globwalk;
 use crate::interpret::Context;
 use crate::interpret::handle_statement;
 
@@ -742,5 +744,44 @@ impl KlisterValueV2 for KlisterDict {
         self.val.insert(index.val.clone(), set_to);
 
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+#[derive(Clone)]
+#[derive(gc::Trace, gc::Finalize)]
+pub struct KlisterBuiltin {
+    pub name: String,
+}
+
+impl KlisterValueV2 for KlisterBuiltin {
+
+    fn call(&self, _context: &mut Context, arguments: Vec<ValWrap>) -> Result<ValWrap, KlisterRTE> {
+        match self.name.as_str() {
+            "glob" => {
+                if arguments.len() != 1 {
+                    return Err(KlisterRTE::new("Wrong number of arguments", false));
+                }
+
+                let borrower = arguments[0].borrow();
+                let xx: &dyn KlisterValueV2 = borrower.as_ref();
+                let pattern: OsString = if let Some(pattern_klstr) = xx.as_any().downcast_ref::<KlisterStr>() {
+                    pattern_klstr.val.clone().into()
+                } else if let Some(pattern_klbytes) = xx.as_any().downcast_ref::<KlisterBytes>()  {
+                    OsString::from_vec(pattern_klbytes.val.clone())
+                } else {
+                    return Err(KlisterRTE::new("Type error", false));
+                };
+
+                let result = globwalk(pattern)?;
+
+                let result = result.into_iter().map(|s| valwrap(KlisterBytes{val: s.into_vec()}));
+
+                let ret = valwrap(KlisterArray{val: result.collect()});
+
+                return Ok(ret);
+            }
+            _ => panic!("Internal interpreter error")
+        }
     }
 }
