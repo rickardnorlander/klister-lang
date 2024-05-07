@@ -1,0 +1,8 @@
+import libc.so.6 ptr fopen(cbc, cbc)
+import libc.so.6 int fclose(ptr)
+import libc.so.6 u64 fwrite(cbb, u64, u64, ptr)
+
+handle = fopen("testfile.txt", "w")
+bytes = `echo Hello world`
+fwrite(bytes, 1, bytes.len, handle)
+fclose(handle)

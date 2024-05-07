@@ -1,7 +1,8 @@
 #![allow(dead_code)]
-use std::ffi::c_int;
-use std::mem;
 use std::ffi::c_double;
+use std::ffi::c_int;
+use std::ffi::c_void;
+use std::mem;
 
 use libffi::middle::Type;
 
@@ -22,7 +23,7 @@ pub enum Mutability {
 #[derive(Debug)]
 #[derive(PartialEq)]
 pub enum TypeTag {
-    KlisterInt, KlisterCStr(OwnershipTag, Mutability), KlisterPtr(Box<TypeTag>, OwnershipTag, Mutability), KlisterBytes, KlisterDouble,
+    KlisterInt, KlisterCStr(OwnershipTag, Mutability), KlisterPtr(Box<TypeTag>, OwnershipTag, Mutability), KlisterBytes, KlisterDouble, OpaquePointer, KlU64
 }
 
 impl TypeTag {
@@ -32,6 +33,8 @@ impl TypeTag {
             "cbc" => Some(TypeTag::KlisterCStr(OwnershipTag::Borrowed, Mutability::Const)),
             "cbb" => Some(TypeTag::KlisterBytes),
             "double" => Some(TypeTag::KlisterDouble),
+            "ptr" => Some(TypeTag::OpaquePointer),
+            "u64" => Some(TypeTag::KlU64),
             //"mmb" -> TypeTag::KlisterPtr(OwnershipTag::OwnedMalloced, Mutability::Mutable)
             _ => None
         }
@@ -43,6 +46,8 @@ impl TypeTag {
             TypeTag::KlisterCStr(OwnershipTag::Borrowed, Mutability::Const) => Some(Type::pointer()),
             TypeTag::KlisterBytes => Some(Type::pointer()),
             TypeTag::KlisterDouble => Some(Type::f64()),
+            TypeTag::OpaquePointer => Some(Type::pointer()),
+            TypeTag::KlU64=> Some(Type::u64()),
             _ => None,
         }
     }
@@ -50,7 +55,9 @@ impl TypeTag {
     pub fn size(&self) -> Option<usize> {
         match self {
             TypeTag::KlisterInt => Some(mem::size_of::<c_int>()),
+            TypeTag::OpaquePointer => Some(mem::size_of::<*const c_void>()),
             TypeTag::KlisterDouble => Some(mem::size_of::<c_double>()),
+            TypeTag::KlU64 => Some(mem::size_of::<u64>()),
             _ => None
         }
     }

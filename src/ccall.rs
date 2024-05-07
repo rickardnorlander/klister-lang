@@ -22,6 +22,7 @@ use crate::value::KlisterBytes;
 use crate::value::KlisterDouble;
 use crate::value::KlisterInteger;
 use crate::value::KlisterValueV2;
+use crate::value::KlisterOpaquePointer;
 use crate::value::KlisterStr;
 use crate::value::ValWrap;
 use crate::value::valwrap;
@@ -189,21 +190,30 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dy
                 args.push(arg(&*ptrptr));
             }
         } else if let Some(x) = xx.as_any().downcast_ref::<KlisterInteger>() {
-            if *argtype != TypeTag::KlisterInt {
+            if *argtype == TypeTag::KlisterInt {
+                let downcast_res = x.val.clone().try_into();
+                let Ok(downcast_x) = downcast_res else {return Err(KlisterRTE::new("Number too big to pass", true));};
+                let downcast: c_int = downcast_x;
+                let ptr = arg_storage.gift_vec(downcast.to_ne_bytes().to_vec());
+                unsafe {
+                    args.push(arg(&*ptr));
+                }
+            } else if *argtype == TypeTag::KlU64 {
+                let downcast_res = x.val.clone().try_into();
+                let Ok(downcast_x) = downcast_res else {return Err(KlisterRTE::new("Number too big to pass", true));};
+                let downcast: u64 = downcast_x;
+                let ptr = arg_storage.gift_vec(downcast.to_ne_bytes().to_vec());
+                unsafe {
+                    args.push(arg(&*ptr));
+                }
+            } else {
                 return Err(KlisterRTE::new("Invalid argument type", false));
             }
-            let downcast_res = x.val.clone().try_into();
-            let Ok(downcast_x) = downcast_res else {return Err(KlisterRTE::new("Number too big to pass", true));};
-            let downcast: c_int = downcast_x;
-            let ptr = arg_storage.gift_vec(downcast.to_ne_bytes().to_vec());
-            unsafe {
-                args.push(arg(&*ptr));
-            }
-        } else if let Some(x) = xx.as_any().downcast_ref::<KlisterDouble>() {
-            if *argtype != TypeTag::KlisterDouble {
+        } else if let Some(x) = xx.as_any().downcast_ref::<KlisterOpaquePointer>() {
+            if *argtype != TypeTag::OpaquePointer {
                 return Err(KlisterRTE::new("Invalid argument type", false));
             }
-            let ptr = arg_storage.gift_vec(x.val.to_ne_bytes().to_vec());
+            let ptr = arg_storage.gift_vec((x.val as usize).to_ne_bytes().to_vec());
             unsafe {
                 args.push(arg(&*ptr));
             }
@@ -228,8 +238,17 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dy
             Ok(KlisterInteger::wrap(bint))
         }
         "double" => {
-            let d = c_double::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert int"));
+            let d = c_double::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert double"));
             Ok(valwrap(KlisterDouble{val: d}))
+        }
+        "ptr" => {
+            let d = usize::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert usize"));
+            Ok(valwrap(KlisterOpaquePointer{val: d as *mut c_void}))
+        }
+        "u64" => {
+            let d = u64::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert usize"));
+            let bint:BigInt = d.into();
+            Ok(KlisterInteger::wrap(bint))
         }
         _ => {
             return Err(KlisterRTE::new("Invalid return type", false));

@@ -797,3 +797,13 @@ impl KlisterValueV2 for KlisterBuiltin {
         }
     }
 }
+
+#[derive(Debug)]
+#[derive(Clone)]
+#[derive(gc::Trace, gc::Finalize)]
+pub struct KlisterOpaquePointer {
+    #[unsafe_ignore_trace] 
+    pub val: *mut c_void,
+}
+
+impl KlisterValueV2 for KlisterOpaquePointer {}

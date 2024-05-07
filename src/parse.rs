@@ -60,7 +60,7 @@ impl<T> SyntaxErrorTrait<T> for Option<T> {
 
 fn parse_import(remaining: &mut &str) -> ParseResult<KlisterStatement> {
     skip_space(remaining);
-    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^import ([a-z0-9.]+) ([a-z0-9.]+) ([a-z][a-z0-9]*)\(((?:[a-z, ]+)?)\)").unwrap());
+    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^import ([a-z0-9.]+) ([a-z0-9.]+) ([a-z][a-z0-9]*)\(((?:[a-zA-Z0-9, ]+)?)\)").unwrap());
     let caps = RE.captures(remaining).context(remaining, "Failed to parse import")?;
     let args = if caps[4].trim() == "" {
         Vec::new()
