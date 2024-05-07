@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::ffi::c_char;
 use std::ffi::c_double;
+use std::ffi::c_float;
 use std::ffi::c_int;
 use std::ffi::c_long;
 use std::ffi::c_void;
@@ -206,6 +207,76 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dy
                 unsafe {
                     args.push(arg(&*ptr));
                 }
+            } else if *argtype == TypeTag::KlU32 {
+                let downcast_res = x.val.clone().try_into();
+                let Ok(downcast_x) = downcast_res else {return Err(KlisterRTE::new("Number too big to pass", true));};
+                let downcast: u32 = downcast_x;
+                let ptr = arg_storage.gift_vec(downcast.to_ne_bytes().to_vec());
+                unsafe {
+                    args.push(arg(&*ptr));
+                }
+            } else if *argtype == TypeTag::KlU16 {
+                let downcast_res = x.val.clone().try_into();
+                let Ok(downcast_x) = downcast_res else {return Err(KlisterRTE::new("Number too big to pass", true));};
+                let downcast: u16 = downcast_x;
+                let ptr = arg_storage.gift_vec(downcast.to_ne_bytes().to_vec());
+                unsafe {
+                    args.push(arg(&*ptr));
+                }
+            } else if *argtype == TypeTag::KlU8 {
+                let downcast_res = x.val.clone().try_into();
+                let Ok(downcast_x) = downcast_res else {return Err(KlisterRTE::new("Number too big to pass", true));};
+                let downcast: u8 = downcast_x;
+                let ptr = arg_storage.gift_vec(downcast.to_ne_bytes().to_vec());
+                unsafe {
+                    args.push(arg(&*ptr));
+                }
+            } else if *argtype == TypeTag::KlI64 {
+                let downcast_res = x.val.clone().try_into();
+                let Ok(downcast_x) = downcast_res else {return Err(KlisterRTE::new("Number too big to pass", true));};
+                let downcast: i64 = downcast_x;
+                let ptr = arg_storage.gift_vec(downcast.to_ne_bytes().to_vec());
+                unsafe {
+                    args.push(arg(&*ptr));
+                }
+            } else if *argtype == TypeTag::KlI32 {
+                let downcast_res = x.val.clone().try_into();
+                let Ok(downcast_x) = downcast_res else {return Err(KlisterRTE::new("Number too big to pass", true));};
+                let downcast: i32 = downcast_x;
+                let ptr = arg_storage.gift_vec(downcast.to_ne_bytes().to_vec());
+                unsafe {
+                    args.push(arg(&*ptr));
+                }
+            } else if *argtype == TypeTag::KlI16 {
+                let downcast_res = x.val.clone().try_into();
+                let Ok(downcast_x) = downcast_res else {return Err(KlisterRTE::new("Number too big to pass", true));};
+                let downcast: i16 = downcast_x;
+                let ptr = arg_storage.gift_vec(downcast.to_ne_bytes().to_vec());
+                unsafe {
+                    args.push(arg(&*ptr));
+                }
+            } else if *argtype == TypeTag::KlI8 {
+                let downcast_res = x.val.clone().try_into();
+                let Ok(downcast_x) = downcast_res else {return Err(KlisterRTE::new("Number too big to pass", true));};
+                let downcast: i8 = downcast_x;
+                let ptr = arg_storage.gift_vec(downcast.to_ne_bytes().to_vec());
+                unsafe {
+                    args.push(arg(&*ptr));
+                }
+            } else {
+                return Err(KlisterRTE::new("Invalid argument type", false));
+            }
+        } else if let Some(x) = xx.as_any().downcast_ref::<KlisterDouble>() {
+            if *argtype == TypeTag::KlisterDouble {
+                let ptr = arg_storage.gift_vec(x.val.to_ne_bytes().to_vec());
+                unsafe {
+                    args.push(arg(&*ptr));
+                }
+            } else if *argtype == TypeTag::KlisterFloat {
+                let ptr = arg_storage.gift_vec((x.val as f32).to_ne_bytes().to_vec());
+                unsafe {
+                    args.push(arg(&*ptr));
+                }
             } else {
                 return Err(KlisterRTE::new("Invalid argument type", false));
             }
@@ -241,12 +312,51 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dy
             let d = c_double::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert double"));
             Ok(valwrap(KlisterDouble{val: d}))
         }
+        "float" => {
+            let d = c_float::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert float"));
+            Ok(valwrap(KlisterDouble{val: d as f64}))
+        }
         "ptr" => {
-            let d = usize::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert usize"));
+            let d = usize::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert ptr"));
             Ok(valwrap(KlisterOpaquePointer{val: d as *mut c_void}))
         }
         "u64" => {
-            let d = u64::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert usize"));
+            let d = u64::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert number"));
+            let bint:BigInt = d.into();
+            Ok(KlisterInteger::wrap(bint))
+        }
+        "u32" => {
+            let d = u32::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert number"));
+            let bint:BigInt = d.into();
+            Ok(KlisterInteger::wrap(bint))
+        }
+        "u16" => {
+            let d = u16::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert number"));
+            let bint:BigInt = d.into();
+            Ok(KlisterInteger::wrap(bint))
+        }
+        "u8" => {
+            let d = u8::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert number"));
+            let bint:BigInt = d.into();
+            Ok(KlisterInteger::wrap(bint))
+        }
+        "i64" => {
+            let d = i64::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert number"));
+            let bint:BigInt = d.into();
+            Ok(KlisterInteger::wrap(bint))
+        }
+        "i32" => {
+            let d = i32::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert number"));
+            let bint:BigInt = d.into();
+            Ok(KlisterInteger::wrap(bint))
+        }
+        "i16" => {
+            let d = i16::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert number"));
+            let bint:BigInt = d.into();
+            Ok(KlisterInteger::wrap(bint))
+        }
+        "i8" => {
+            let d = i8::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert number"));
             let bint:BigInt = d.into();
             Ok(KlisterInteger::wrap(bint))
         }
