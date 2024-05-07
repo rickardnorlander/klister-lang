@@ -634,6 +634,18 @@ impl KlisterValueV2 for KlisterDouble {
         }
     }
 
+    fn member_function(&self, _context: &mut Context, name: &str, arguments: Vec<ValWrap>) -> Result<ValWrap, KlisterRTE> {
+        match name {
+            "to_string" => {
+                if arguments.len() != 0 {
+                    return Err(KlisterRTE::new("Wrong number of arguments", false));
+                }
+                return Ok(valwrap(KlisterStr{val: self.val.to_string()}));
+            }
+            _ => {return Err(KlisterRTE::new(&format!("Type {} has no member function {}", self.get_type_name(), name), false));}
+        }
+    }
+
     fn bin_op_backward(&self, op: Operation, other_ref: &dyn KlisterValueV2) -> Oppi<ValWrap, KlisterRTE> {
         let selfval = self.val.clone();
         let otheroppi = KlisterDouble::get_other(other_ref);

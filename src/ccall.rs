@@ -1,8 +1,9 @@
 use std::collections::HashMap;
-use std::ffi::c_void;
 use std::ffi::c_char;
+use std::ffi::c_double;
 use std::ffi::c_int;
 use std::ffi::c_long;
+use std::ffi::c_void;
 use std::ffi::CString;
 use std::iter::zip;
 
@@ -18,10 +19,12 @@ use crate::types::Mutability;
 use crate::types::TypeTag;
 use crate::types::OwnershipTag;
 use crate::value::KlisterBytes;
+use crate::value::KlisterDouble;
 use crate::value::KlisterInteger;
 use crate::value::KlisterValueV2;
 use crate::value::KlisterStr;
 use crate::value::ValWrap;
+use crate::value::valwrap;
 
 type LmidT = c_long;
 
@@ -96,6 +99,9 @@ impl Libraries {
             return Err(KlisterRTE::new("Import name is not valid c-string", false))?;
         };
         let function = unsafe {dlsym(library, c_fnname.as_c_str().as_ptr())};
+        if function.is_null() {
+            return Err(KlisterRTE::new("Failed to load symbol", true));
+        };
         let retinfo = TypeTag::from_string(rettypename).ok_or(KlisterRTE::new("Unknown type tag", false))?.get_ffi_type().ok_or(KlisterRTE::new("Unsupported type tag", false))?;
         let mut argtypes = Vec::<Type>::new();
         let mut argtags = Vec::<TypeTag>::new();
@@ -193,6 +199,14 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dy
             unsafe {
                 args.push(arg(&*ptr));
             }
+        } else if let Some(x) = xx.as_any().downcast_ref::<KlisterDouble>() {
+            if *argtype != TypeTag::KlisterDouble {
+                return Err(KlisterRTE::new("Invalid argument type", false));
+            }
+            let ptr = arg_storage.gift_vec(x.val.to_ne_bytes().to_vec());
+            unsafe {
+                args.push(arg(&*ptr));
+            }
         }
     }
 
@@ -212,6 +226,10 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dy
 
             let bint:BigInt = cint.into();
             Ok(KlisterInteger::wrap(bint))
+        }
+        "double" => {
+            let d = c_double::from_ne_bytes(result.try_into().expect("Internal interpreter error: Failed to convert int"));
+            Ok(valwrap(KlisterDouble{val: d}))
         }
         _ => {
             return Err(KlisterRTE::new("Invalid return type", false));

@@ -4,6 +4,7 @@ import libc.so.6 int getchar()
 import libc.so.6 int atoi(cbc)
 import libc.so.6 int write(int, cbb, int)
 import libc.so.6 int fsync(int)
+import libm.so.6 double pow(double, double)
 
 function writebytes(bytes) {
     write(1, bytes, bytes.len)
@@ -87,3 +88,4 @@ if(asdf<-2){
 
 puts((2+3*4).to_string())
 puts(((2+3)*4).to_string())
+puts(pow(2.0, 0.5).to_string())
