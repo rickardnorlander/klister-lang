@@ -4,7 +4,6 @@ use std::ffi::c_char;
 use std::ffi::c_int;
 use std::ffi::c_long;
 use std::ffi::CString;
-use std::ffi::CStr;
 use std::iter::zip;
 
 use libffi::low;
@@ -113,10 +112,45 @@ impl Libraries {
     }
 }
 
+struct ArgumentStorage {
+    vec: Vec::<*mut [u8]>
+}
+
+impl ArgumentStorage {
+    fn new() -> ArgumentStorage {
+        ArgumentStorage{vec: Vec::new()}
+    }
+
+    fn push_ptr(&mut self, ptr: *mut u8) -> *mut u8 {
+        let bytes = (ptr as usize).to_ne_bytes();
+        return self.gift_vec(bytes.to_vec());
+    }
+
+    fn gift_vec(&mut self, v: Vec<u8>) -> *mut u8 {
+        let b = v.into_boxed_slice();
+        return self.gift_box(b);
+    }
+
+    fn gift_box(&mut self, b: Box<[u8]>) -> *mut u8  {
+        let ptr = Box::<[u8]>::into_raw(b);
+        self.vec.push(ptr);
+        return ptr as *mut u8;
+    }
+}
+
+impl Drop for ArgumentStorage {
+    fn drop(&mut self) {
+        for v in &mut self.vec {
+            unsafe {
+                drop(Box::<[u8]>::from_raw(*v));
+            }
+        }
+    }
+}
+
 pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dyn KlisterValueV2>>) -> Result<ValWrap, KlisterRTE> {
     let mut args = Vec::<Arg>::new();
-    let mut arg_storage = Vec::<Vec<u8>>::new();
-    let mut ptr_storage = Vec::<Box<*mut c_void>>::new();
+    let mut arg_storage = ArgumentStorage::new();
 
     let fn_data = libs.functions.get(&fn_name as &str).expect("Internal interpreter error: Function not found");
     let FunctionData{ptr: fn_ptr, cif, retstr: rettypename, args: argtypes} = fn_data;
@@ -131,25 +165,23 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dy
             if *argtype != TypeTag::KlisterCStr(OwnershipTag::Borrowed, Mutability::Const) {
                 return Err(KlisterRTE::new("Invalid argument type", false));
             }
-            let mut st = Vec::with_capacity(x.val.len() + 1);
-            st.extend(x.val.as_bytes());
-            st.push(0);
-            if CStr::from_bytes_with_nul(&st).is_err() {
-                return Err(KlisterRTE::new("Validation as c-string failed", true))
+            let Ok(cs) = CString::new(x.val.clone()) else {
+                return Err(KlisterRTE::new("Validation as c-string failed", true));
+            };
+            let ptr = arg_storage.gift_vec(cs.into_bytes());
+            let ptrptr = arg_storage.push_ptr(ptr);
+            unsafe {
+                args.push(arg(&*ptrptr));
             }
-            arg_storage.push(st);
-            let ptr = arg_storage.last().unwrap().as_ptr();
-            let addr = ptr as usize;
-            let bytes = addr.to_ne_bytes();
-            arg_storage.push(bytes.to_vec());
-            let myref: &u8 = arg_storage.last().unwrap().first().unwrap();
-            args.push(arg(myref));
         } else if let Some(x) = xx.as_any().downcast_ref::<KlisterBytes>() {
             if *argtype != TypeTag::KlisterBytes {
                 return Err(KlisterRTE::new("Invalid argument type", false));
             }
-            ptr_storage.push(Box::new(x.val.as_ptr() as *mut c_void));
-            args.push(arg(ptr_storage.last().unwrap().as_ref()));
+            let ptr = arg_storage.gift_vec(x.val.clone());
+            let ptrptr = arg_storage.push_ptr(ptr);
+            unsafe {
+                args.push(arg(&*ptrptr));
+            }
         } else if let Some(x) = xx.as_any().downcast_ref::<KlisterInteger>() {
             if *argtype != TypeTag::KlisterInt {
                 return Err(KlisterRTE::new("Invalid argument type", false));
@@ -157,9 +189,10 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dy
             let downcast_res = x.val.clone().try_into();
             let Ok(downcast_x) = downcast_res else {return Err(KlisterRTE::new("Number too big to pass", true));};
             let downcast: c_int = downcast_x;
-            arg_storage.push(downcast.to_ne_bytes().to_vec());
-            let myref: &u8 = arg_storage.last().unwrap().first().unwrap();
-            args.push(arg(myref));
+            let ptr = arg_storage.gift_vec(downcast.to_ne_bytes().to_vec());
+            unsafe {
+                args.push(arg(&*ptr));
+            }
         }
     }
 
@@ -188,7 +221,6 @@ pub fn ffi_call(libs: &mut Libraries, fn_name: &str, argument_values: Vec<Box<dy
     // There are pointers into these structures.
     // So use explicit drops to make sure the values live until this point.
     drop(arg_storage);
-    drop(ptr_storage);
     drop(argument_values);
     return ret;
 }
